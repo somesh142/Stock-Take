@@ -1,0 +1,1497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StockTake Pro</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #0d0d14;
+  --bg2:      #13131f;
+  --surface:  #1a1a28;
+  --surface2: #22223a;
+  --border:   #2e2e4a;
+  --border2:  #3a3a5c;
+  --text:     #e8e8f5;
+  --muted:    #6b6b9a;
+  --accent:   #f0c040;
+  --accentd:  #c49a20;
+  --green:    #2ecc8a;
+  --red:      #f05060;
+  --blue:     #4a8fff;
+  --shadow:   rgba(0,0,0,0.4);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-serif;min-height:100vh;overflow-x:hidden;}
+
+/* ── GRID BG ── */
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(240,192,64,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(240,192,64,0.03) 1px,transparent 1px);background-size:48px 48px;pointer-events:none;z-index:0;}
+
+/* ── SCREENS ── */
+.screen{display:none;min-height:100vh;position:relative;z-index:1;}
+.screen.active{display:flex;flex-direction:column;}
+
+/* ── ENTRY SCREEN (role picker) ── */
+#entry-screen{align-items:center;justify-content:center;padding:2rem;}
+.entry-wrap{width:100%;max-width:440px;}
+.brand{text-align:center;margin-bottom:3rem;}
+.brand-logo{font-family:'Bebas Neue',sans-serif;font-size:3.5rem;letter-spacing:0.06em;line-height:1;background:linear-gradient(135deg,var(--accent),#fff8dc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.brand-sub{font-family:'IBM Plex Mono',monospace;font-size:0.65rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--muted);margin-top:0.3rem;}
+.role-cards{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;}
+.role-card{background:var(--surface);border:2px solid var(--border);padding:2rem 1.5rem;cursor:pointer;transition:all 0.2s;text-align:center;position:relative;overflow:hidden;}
+.role-card::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,transparent,rgba(240,192,64,0.04));opacity:0;transition:opacity 0.2s;}
+.role-card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 8px 32px rgba(240,192,64,0.15);}
+.role-card:hover::before{opacity:1;}
+.role-icon{font-size:2.2rem;margin-bottom:0.75rem;}
+.role-title{font-family:'Bebas Neue',sans-serif;font-size:1.3rem;letter-spacing:0.06em;margin-bottom:0.3rem;}
+.role-desc{font-family:'IBM Plex Mono',monospace;font-size:0.65rem;color:var(--muted);line-height:1.5;}
+
+/* ── ADMIN LOGIN ── */
+#admin-login-screen{align-items:center;justify-content:center;padding:2rem;}
+.login-card{background:var(--surface);border:2px solid var(--border);width:100%;max-width:380px;overflow:hidden;box-shadow:0 24px 64px var(--shadow);}
+.login-header{background:linear-gradient(135deg,var(--accent),var(--accentd));padding:1.5rem 2rem;}
+.login-header h2{font-family:'Bebas Neue',sans-serif;font-size:1.8rem;letter-spacing:0.06em;color:#1a1200;}
+.login-header p{font-family:'IBM Plex Mono',monospace;font-size:0.68rem;color:rgba(26,18,0,0.65);margin-top:0.2rem;letter-spacing:0.08em;}
+.login-body{padding:2rem;}
+
+/* ── USER LOGIN ── */
+#user-login-screen{align-items:center;justify-content:center;padding:2rem;}
+
+/* ── INPUTS ── */
+label.field-label{display:block;font-family:'IBM Plex Mono',monospace;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:0.4rem;font-weight:600;}
+input[type=text],input[type=password],input[type=number],input[type=date],select,textarea{
+  width:100%;background:var(--bg2);border:1.5px solid var(--border2);color:var(--text);
+  font-family:'IBM Plex Mono',monospace;font-size:0.85rem;padding:0.65rem 0.9rem;outline:none;
+  transition:border-color 0.15s,box-shadow 0.15s;border-radius:3px;appearance:none;}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(240,192,64,0.1);}
+.field{margin-bottom:1rem;}
+
+/* ── BUTTONS ── */
+.btn{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:0.8rem;letter-spacing:0.06em;text-transform:uppercase;padding:0.7rem 1.4rem;border:2px solid;cursor:pointer;transition:all 0.15s;display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:3px;}
+.btn-gold{background:var(--accent);color:#1a1200;border-color:var(--accent);width:100%;}
+.btn-gold:hover{background:#f5cc55;box-shadow:0 4px 20px rgba(240,192,64,0.4);}
+.btn-ghost{background:transparent;color:var(--muted);border-color:var(--border2);}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent);}
+.btn-green{background:var(--green);color:#051a10;border-color:var(--green);}
+.btn-green:hover{box-shadow:0 4px 20px rgba(46,204,138,0.35);}
+.btn-red{background:var(--red);color:#fff;border-color:var(--red);}
+.btn-sm{padding:0.4rem 0.85rem;font-size:0.7rem;}
+.btn:disabled{opacity:0.35;cursor:not-allowed;pointer-events:none;}
+.btn-full{width:100%;}
+
+/* ── TOPBAR ── */
+.topbar{height:52px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 1.5rem;position:sticky;top:0;z-index:30;}
+.topbar-brand{font-family:'Bebas Neue',sans-serif;font-size:1.4rem;letter-spacing:0.06em;color:var(--accent);display:flex;align-items:center;gap:10px;}
+.topbar-brand .role-tag{font-family:'IBM Plex Mono',monospace;font-size:0.6rem;background:var(--surface2);border:1px solid var(--border2);padding:0.15rem 0.5rem;color:var(--muted);letter-spacing:0.1em;border-radius:2px;font-weight:600;}
+.topbar-right{display:flex;align-items:center;gap:0.6rem;}
+.user-pill{background:var(--surface2);border:1px solid var(--border2);font-family:'IBM Plex Mono',monospace;font-size:0.7rem;padding:0.3rem 0.75rem;color:var(--accent);letter-spacing:0.05em;display:flex;align-items:center;gap:6px;border-radius:2px;}
+.user-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);}
+.tb-btn{background:transparent;border:1px solid var(--border2);color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:0.65rem;padding:0.3rem 0.7rem;cursor:pointer;letter-spacing:0.06em;text-transform:uppercase;transition:all 0.15s;border-radius:2px;}
+.tb-btn:hover{border-color:var(--accent);color:var(--accent);}
+.tb-btn.highlight{border-color:rgba(46,204,138,0.4);color:var(--green);}
+
+/* ══════════════════════════════
+   ADMIN DASHBOARD
+══════════════════════════════ */
+#admin-screen.active{display:block;}
+.admin-layout{display:grid;grid-template-columns:220px 1fr;min-height:calc(100vh - 52px);}
+@media(max-width:900px){.admin-layout{grid-template-columns:1fr;}}
+
+/* Sidebar */
+.sidebar{background:var(--bg2);border-right:1px solid var(--border);padding:1.5rem 1rem;}
+.sidebar-section{margin-bottom:2rem;}
+.sidebar-label{font-family:'IBM Plex Mono',monospace;font-size:0.6rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted);margin-bottom:0.6rem;padding:0 0.5rem;}
+.sidebar-item{display:flex;align-items:center;gap:10px;padding:0.6rem 0.75rem;border-radius:4px;cursor:pointer;font-size:0.82rem;color:var(--muted);transition:all 0.15s;border:1px solid transparent;font-family:'IBM Plex Mono',monospace;}
+.sidebar-item:hover{background:var(--surface2);color:var(--text);}
+.sidebar-item.active{background:rgba(240,192,64,0.1);border-color:rgba(240,192,64,0.2);color:var(--accent);}
+.sidebar-item .si-icon{font-size:0.9rem;width:18px;text-align:center;}
+
+/* Admin Content */
+.admin-content{padding:1.5rem;overflow:auto;}
+.admin-tab{display:none;}
+.admin-tab.active{display:block;}
+.page-title{font-family:'Bebas Neue',sans-serif;font-size:2rem;letter-spacing:0.04em;color:var(--text);margin-bottom:0.3rem;}
+.page-sub{font-family:'IBM Plex Mono',monospace;font-size:0.72rem;color:var(--muted);margin-bottom:1.5rem;}
+
+/* Stat cards */
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.5rem;}
+@media(max-width:1100px){.stat-grid{grid-template-columns:repeat(2,1fr);}}
+.stat-card{background:var(--surface);border:1px solid var(--border);padding:1.25rem 1.5rem;border-radius:6px;position:relative;overflow:hidden;}
+.stat-card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--accent);opacity:0.3;}
+.stat-card.green::after{background:var(--green);}
+.stat-card.red::after{background:var(--red);}
+.stat-card.blue::after{background:var(--blue);}
+.sc-val{font-family:'Bebas Neue',sans-serif;font-size:2.4rem;line-height:1;color:var(--accent);letter-spacing:0.03em;}
+.sc-val.green{color:var(--green);}
+.sc-val.red{color:var(--red);}
+.sc-val.blue{color:var(--blue);}
+.sc-label{font-family:'IBM Plex Mono',monospace;font-size:0.62rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-top:0.3rem;}
+
+/* Tables */
+.data-table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-bottom:1.5rem;}
+.dt-header{padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.dt-title{font-family:'IBM Plex Mono',monospace;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);font-weight:600;}
+table{width:100%;border-collapse:collapse;}
+th{background:var(--bg2);font-family:'IBM Plex Mono',monospace;font-size:0.62rem;text-transform:uppercase;letter-spacing:0.1em;padding:0.6rem 1rem;text-align:left;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;}
+td{padding:0.6rem 1rem;border-bottom:1px solid rgba(46,46,74,0.5);font-size:0.8rem;white-space:nowrap;font-family:'IBM Plex Mono',monospace;}
+tbody tr:hover td{background:rgba(255,255,255,0.02);}
+tbody tr:last-child td{border-bottom:none;}
+.td-name{font-family:'IBM Plex Sans',sans-serif;font-weight:600;font-size:0.82rem;}
+
+/* Tags */
+.tag{display:inline-flex;align-items:center;padding:0.15rem 0.55rem;font-size:0.65rem;font-family:'IBM Plex Mono',monospace;font-weight:600;letter-spacing:0.06em;border-radius:2px;}
+.tag-user{background:rgba(74,143,255,0.15);color:var(--blue);border:1px solid rgba(74,143,255,0.25);}
+.tag-qty{background:var(--surface2);color:var(--accent);border:1px solid var(--border2);font-family:'Bebas Neue',sans-serif;font-size:0.9rem;min-width:38px;justify-content:center;letter-spacing:0.04em;}
+.tag-ok{background:rgba(46,204,138,0.12);color:var(--green);border:1px solid rgba(46,204,138,0.2);}
+.tag-warn{background:rgba(240,80,96,0.12);color:var(--red);border:1px solid rgba(240,80,96,0.2);}
+.tag-amber{background:rgba(240,192,64,0.12);color:var(--accent);border:1px solid rgba(240,192,64,0.2);}
+
+/* Progress bar */
+.prog-wrap{background:var(--bg2);border-radius:99px;height:6px;overflow:hidden;margin-top:0.4rem;}
+.prog-bar{height:100%;border-radius:99px;background:var(--green);transition:width 0.4s;}
+.prog-bar.over{background:var(--blue);}
+.prog-bar.warn{background:var(--accent);}
+
+/* Upload zone */
+.upload-zone{border:2px dashed var(--border2);padding:2rem;text-align:center;cursor:pointer;transition:all 0.2s;background:var(--bg2);border-radius:6px;position:relative;margin-bottom:1rem;}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:rgba(240,192,64,0.04);}
+.upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+.upload-zone h3{font-family:'IBM Plex Mono',monospace;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;}
+.upload-zone p{font-size:0.72rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;}
+
+/* Col map */
+.col-grid{display:grid;grid-template-columns:1fr 1fr;gap:0.6rem 1rem;margin-bottom:1.5rem;}
+.col-lbl{font-size:0.75rem;font-family:'IBM Plex Mono',monospace;color:var(--muted);margin-bottom:0.3rem;}
+.col-lbl span{color:var(--red);}
+
+/* Alerts */
+.alert-item{background:var(--surface);border:1px solid var(--border);padding:0.85rem 1rem;border-radius:4px;margin-bottom:0.6rem;display:flex;align-items:center;gap:0.75rem;font-size:0.8rem;}
+.alert-item.red{border-left:3px solid var(--red);}
+.alert-item.amber{border-left:3px solid var(--accent);}
+.alert-icon{font-size:1rem;flex-shrink:0;}
+.alert-text{flex:1;}
+.alert-text strong{font-family:'IBM Plex Sans',sans-serif;}
+.alert-text small{display:block;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:0.68rem;margin-top:2px;}
+
+/* ══════════════════════════════
+   USER SCAN SCREEN
+══════════════════════════════ */
+#user-screen.active{display:block;}
+.user-layout{display:grid;grid-template-columns:360px 1fr;min-height:calc(100vh - 52px);}
+@media(max-width:800px){.user-layout{grid-template-columns:1fr;}}
+
+.scan-panel{background:var(--surface);border-right:1px solid var(--border);padding:1.5rem;display:flex;flex-direction:column;gap:1.1rem;}
+.section-label{font-family:'IBM Plex Mono',monospace;font-size:0.62rem;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted);margin-bottom:0.5rem;display:flex;align-items:center;gap:0.5rem;}
+.section-label::after{content:'';flex:1;height:1px;background:var(--border);}
+
+.scan-box{position:relative;}
+.scan-box input{padding-left:2.6rem;font-size:0.95rem;font-weight:600;border-color:var(--border2);border-width:2px;}
+.scan-box input:focus{border-color:var(--accent);}
+.scan-pfx{position:absolute;left:0.8rem;top:50%;transform:translateY(-50%);font-size:0.9rem;pointer-events:none;}
+
+.product-card{border:2px solid var(--border2);background:var(--bg2);padding:1rem;min-height:80px;display:flex;flex-direction:column;justify-content:center;transition:border-color 0.2s;position:relative;border-radius:4px;}
+.product-card.found{border-color:var(--green);background:rgba(46,204,138,0.04);}
+.product-card.not-found{border-color:var(--red);background:rgba(240,80,96,0.04);}
+.pc-badge{position:absolute;top:0.5rem;right:0.75rem;font-family:'IBM Plex Mono',monospace;font-size:0.6rem;background:var(--surface2);color:var(--muted);padding:0.15rem 0.5rem;border-radius:2px;}
+.pc-name{font-weight:700;font-size:0.95rem;margin-bottom:0.3rem;}
+.pc-meta{font-family:'IBM Plex Mono',monospace;font-size:0.7rem;color:var(--muted);display:flex;flex-wrap:wrap;gap:0.5rem;}
+
+.qty-row{display:flex;gap:0.5rem;align-items:stretch;}
+.qty-step{width:42px;background:var(--bg2);border:2px solid var(--border2);color:var(--text);font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.15s;border-radius:3px;}
+.qty-step:hover{border-color:var(--accent);color:var(--accent);}
+.qty-main{flex:1;text-align:center;font-size:1.8rem;font-weight:700;font-family:'Bebas Neue',sans-serif;letter-spacing:0.05em;border-width:2px;}
+
+.inv-search-wrap{position:relative;}
+.inv-results{display:none;border:1.5px solid var(--border2);border-top:none;background:var(--surface);max-height:180px;overflow-y:auto;position:absolute;top:100%;left:0;right:0;z-index:10;border-radius:0 0 4px 4px;}
+.inv-item{padding:0.55rem 0.85rem;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-size:0.78rem;transition:background 0.1s;}
+.inv-item:last-child{border-bottom:none;}
+.inv-item:hover{background:rgba(240,192,64,0.06);}
+.inv-item .ic{font-family:'IBM Plex Mono',monospace;font-size:0.68rem;color:var(--muted);}
+
+/* Right log panel */
+.log-panel-user{display:flex;flex-direction:column;}
+.log-stats{background:var(--bg2);border-bottom:1px solid var(--border);padding:1rem 1.5rem;display:grid;grid-template-columns:repeat(3,1fr);}
+.ls-block{padding:0 1rem;border-right:1px solid var(--border);}
+.ls-block:first-child{padding-left:0;}
+.ls-block:last-child{border-right:none;}
+.ls-val{font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:var(--accent);letter-spacing:0.03em;line-height:1;}
+.ls-lbl{font-family:'IBM Plex Mono',monospace;font-size:0.58rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-top:0.2rem;}
+.log-area{flex:1;padding:1.25rem;overflow:auto;}
+
+/* ── MODALS ── */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:50;align-items:center;justify-content:center;padding:1rem;backdrop-filter:blur(4px);}
+.overlay.open{display:flex;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:2rem;width:100%;max-width:460px;box-shadow:0 24px 80px var(--shadow);}
+.modal h3{font-family:'Bebas Neue',sans-serif;font-size:1.6rem;letter-spacing:0.04em;margin-bottom:0.4rem;}
+.modal p{color:var(--muted);font-size:0.8rem;margin-bottom:1.25rem;font-family:'IBM Plex Mono',monospace;line-height:1.6;}
+.modal-actions{display:flex;gap:0.75rem;flex-wrap:wrap;}
+.modal-actions .btn{flex:1;}
+
+/* Merge modal */
+.merge-modal{max-width:540px;}
+.file-chip{display:flex;justify-content:space-between;align-items:center;background:var(--bg2);border:1px solid var(--border2);padding:0.45rem 0.75rem;font-family:'IBM Plex Mono',monospace;font-size:0.72rem;border-radius:3px;margin-bottom:0.35rem;}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--surface2);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:0.78rem;padding:0.8rem 1.2rem;border-left:3px solid var(--green);border-radius:4px;z-index:100;transform:translateX(130%);transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1);max-width:320px;box-shadow:0 8px 32px var(--shadow);}
+#toast.show{transform:translateX(0);}
+#toast.err{border-left-color:var(--red);}
+#toast.warn{border-left-color:var(--accent);}
+
+/* ── EMPTY ── */
+.empty-state{padding:3rem 1rem;text-align:center;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:0.8rem;}
+.empty-state .ei{font-size:2rem;margin-bottom:0.5rem;}
+
+/* Settings panel */
+.settings-section{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:1.5rem;margin-bottom:1.5rem;}
+.settings-section h3{font-family:'IBM Plex Mono',monospace;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:1rem;font-weight:600;}
+.pw-row{display:flex;gap:0.75rem;align-items:flex-end;}
+.pw-row .field{flex:1;margin:0;}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════
+  ENTRY — Role Picker
+══════════════════════════════════════ -->
+<div id="entry-screen" class="screen active">
+  <div class="entry-wrap">
+    <div class="brand">
+      <div class="brand-logo">📦 StockTake Pro</div>
+      <div class="brand-sub">Warehouse Stock Take System</div>
+    </div>
+    <div class="role-cards">
+      <div class="role-card" onclick="showScreen('admin-login-screen')">
+        <div class="role-icon">🔐</div>
+        <div class="role-title">Admin</div>
+        <div class="role-desc">Upload inventory, view dashboard, export results</div>
+      </div>
+      <div class="role-card" onclick="showScreen('user-login-screen')">
+        <div class="role-icon">📱</div>
+        <div class="role-title">Scanner</div>
+        <div class="role-desc">Scan products, enter qty & expiry dates</div>
+      </div>
+    </div>
+    <div style="text-align:center;font-family:'IBM Plex Mono',monospace;font-size:0.68rem;color:var(--muted);">
+      Choose your role to continue
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+  ADMIN LOGIN
+══════════════════════════════════════ -->
+<div id="admin-login-screen" class="screen">
+  <div style="display:flex;align-items:center;justify-content:center;flex:1;padding:2rem;">
+    <div class="login-card">
+      <div class="login-header">
+        <h2>🔐 Admin Login</h2>
+        <p>STOCKTAKE PRO · ADMINISTRATOR ACCESS</p>
+      </div>
+      <div class="login-body">
+        <div class="field">
+          <label class="field-label">Admin Username</label>
+          <input type="text" id="admin-user-input" placeholder="admin" autocomplete="off"/>
+        </div>
+        <div class="field">
+          <label class="field-label">Password</label>
+          <input type="password" id="admin-pass-input" placeholder="••••••••" />
+        </div>
+        <div id="admin-login-err" style="color:var(--red);font-family:'IBM Plex Mono',monospace;font-size:0.72rem;margin-bottom:0.75rem;display:none;">Incorrect username or password.</div>
+        <button class="btn btn-gold" onclick="doAdminLogin()">→ Enter Dashboard</button>
+        <button class="btn btn-ghost btn-full" style="margin-top:0.6rem;" onclick="showScreen('entry-screen')">← Back</button>
+        <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border);font-family:'IBM Plex Mono',monospace;font-size:0.65rem;color:var(--muted);line-height:1.7;">
+          Default credentials:<br>Username: <strong style="color:var(--text);">admin</strong> · Password: <strong style="color:var(--text);">admin123</strong><br>
+          <span style="color:var(--accent);">Change in Admin → Settings</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+  USER LOGIN
+══════════════════════════════════════ -->
+<div id="user-login-screen" class="screen">
+  <div style="display:flex;align-items:center;justify-content:center;flex:1;padding:2rem;">
+    <div class="login-card">
+      <div class="login-header" style="background:linear-gradient(135deg,var(--green),#1a9960);">
+        <h2>📱 Scanner Login</h2>
+        <p>STOCKTAKE PRO · SCANNER ACCESS</p>
+      </div>
+      <div class="login-body">
+        <div id="no-inv-warning" style="display:none;background:rgba(240,192,64,0.1);border:1px solid rgba(240,192,64,0.3);padding:0.75rem 1rem;border-radius:4px;margin-bottom:1rem;font-family:'IBM Plex Mono',monospace;font-size:0.72rem;color:var(--accent);">
+          ⚠ No inventory loaded. Ask your admin to upload the inventory file first.
+        </div>
+        <div class="field">
+          <label class="field-label">Your Name</label>
+          <input type="text" id="user-name-input" placeholder="e.g. Sarah W." autocomplete="off"/>
+        </div>
+        <button class="btn btn-green btn-full" onclick="doUserLogin()">→ Start Scanning</button>
+        <button class="btn btn-ghost btn-full" style="margin-top:0.6rem;" onclick="showScreen('entry-screen')">← Back</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+  ADMIN SCREEN
+══════════════════════════════════════ -->
+<div id="admin-screen" class="screen">
+
+  <div class="topbar">
+    <div class="topbar-brand">
+      📦 StockTake <span class="role-tag">ADMIN</span>
+    </div>
+    <div class="topbar-right">
+      <div class="user-pill"><div class="user-dot"></div><span id="admin-name-label">Admin</span></div>
+      <button class="tb-btn" onclick="logoutAdmin()">Logout</button>
+    </div>
+  </div>
+
+  <div class="admin-layout">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Dashboard</div>
+        <div class="sidebar-item active" data-tab="overview" onclick="switchTab('overview',this)"><span class="si-icon">📊</span> Overview</div>
+        <div class="sidebar-item" data-tab="users" onclick="switchTab('users',this)"><span class="si-icon">👥</span> Users</div>
+        <div class="sidebar-item" data-tab="products" onclick="switchTab('products',this)"><span class="si-icon">📦</span> Products</div>
+        <div class="sidebar-item" data-tab="expiry" onclick="switchTab('expiry',this)"><span class="si-icon">⚠</span> Expiry Alerts</div>
+        <div class="sidebar-item" data-tab="log" onclick="switchTab('log',this)"><span class="si-icon">📋</span> Full Log</div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Data</div>
+        <div class="sidebar-item" data-tab="upload" onclick="switchTab('upload',this)"><span class="si-icon">⬆</span> Upload Inventory</div>
+        <div class="sidebar-item" data-tab="export" onclick="switchTab('export',this)"><span class="si-icon">⬇</span> Export & Merge</div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">System</div>
+        <div class="sidebar-item" data-tab="settings" onclick="switchTab('settings',this)"><span class="si-icon">⚙</span> Settings</div>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div class="admin-content">
+
+      <!-- ── OVERVIEW ── -->
+      <div class="admin-tab active" id="tab-overview">
+        <div class="page-title">Overview</div>
+        <div class="page-sub" id="overview-sub">Loading…</div>
+        <div class="stat-grid">
+          <div class="stat-card"><div class="sc-val" id="ov-total">0</div><div class="sc-label">Total Scans</div></div>
+          <div class="stat-card green"><div class="sc-val green" id="ov-products">0</div><div class="sc-label">Products Scanned</div></div>
+          <div class="stat-card blue"><div class="sc-val blue" id="ov-units">0</div><div class="sc-label">Units Counted</div></div>
+          <div class="stat-card red"><div class="sc-val red" id="ov-alerts">0</div><div class="sc-label">Expiry Alerts</div></div>
+        </div>
+        <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);">
+          <div class="stat-card"><div class="sc-val" id="ov-users">0</div><div class="sc-label">Active Users</div></div>
+          <div class="stat-card"><div class="sc-val" id="ov-inv">0</div><div class="sc-label">Inventory Items</div></div>
+          <div class="stat-card"><div class="sc-val" id="ov-coverage">0%</div><div class="sc-label">Coverage</div></div>
+        </div>
+
+        <!-- Recent activity -->
+        <div class="data-table-wrap">
+          <div class="dt-header"><div class="dt-title">Recent Scans</div></div>
+          <div style="overflow-x:auto;">
+            <table><thead><tr><th>Time</th><th>Product</th><th>Qty</th><th>User</th><th>Expiry</th></tr></thead>
+            <tbody id="recent-tbody"></tbody></table>
+          </div>
+          <div class="empty-state" id="recent-empty"><div class="ei">📭</div>No scans yet</div>
+        </div>
+      </div>
+
+      <!-- ── USERS ── -->
+      <div class="admin-tab" id="tab-users">
+        <div class="page-title">Active Users</div>
+        <div class="page-sub">All users who have scanned during this stock take</div>
+        <div class="data-table-wrap">
+          <div class="dt-header"><div class="dt-title">User Activity</div></div>
+          <div style="overflow-x:auto;">
+            <table><thead><tr><th>User</th><th>Scans</th><th>Units Counted</th><th>Products</th><th>Last Scan</th><th>Status</th></tr></thead>
+            <tbody id="users-tbody"></tbody></table>
+          </div>
+          <div class="empty-state" id="users-empty"><div class="ei">👥</div>No active users yet</div>
+        </div>
+      </div>
+
+      <!-- ── PRODUCTS ── -->
+      <div class="admin-tab" id="tab-products">
+        <div class="page-title">Products Progress</div>
+        <div class="page-sub">Scanned vs expected quantities for each product</div>
+        <div class="data-table-wrap">
+          <div class="dt-header">
+            <div class="dt-title">All Products</div>
+            <div style="display:flex;gap:0.5rem;">
+              <div class="tag tag-ok" style="cursor:pointer;" onclick="filterProducts('all')" id="pf-all">All</div>
+              <div class="tag" style="cursor:pointer;background:rgba(46,204,138,0.1);color:var(--green);border:1px solid rgba(46,204,138,0.2);" onclick="filterProducts('done')" id="pf-done">Done</div>
+              <div class="tag tag-warn" style="cursor:pointer;" onclick="filterProducts('pending')" id="pf-pending">Pending</div>
+            </div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table><thead><tr><th>Code</th><th>Product Name</th><th>Category</th><th>Expected</th><th>Counted</th><th>Diff</th><th>Progress</th><th>Scanned By</th></tr></thead>
+            <tbody id="products-tbody"></tbody></table>
+          </div>
+          <div class="empty-state" id="products-empty"><div class="ei">📦</div>No inventory loaded</div>
+        </div>
+      </div>
+
+      <!-- ── EXPIRY ── -->
+      <div class="admin-tab" id="tab-expiry">
+        <div class="page-title">Expiry Alerts</div>
+        <div class="page-sub">Products flagged based on expiry dates entered during scanning</div>
+        <div id="expiry-expired-section">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--red);margin-bottom:0.6rem;font-weight:600;">🔴 Expired</div>
+          <div id="expiry-expired-list"></div>
+        </div>
+        <div id="expiry-soon-section" style="margin-top:1.25rem;">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--accent);margin-bottom:0.6rem;font-weight:600;">🟡 Expiring Within 30 Days</div>
+          <div id="expiry-soon-list"></div>
+        </div>
+        <div class="empty-state" id="expiry-empty" style="display:none;"><div class="ei">✅</div>No expiry alerts</div>
+      </div>
+
+      <!-- ── FULL LOG ── -->
+      <div class="admin-tab" id="tab-log">
+        <div class="page-title">Full Scan Log</div>
+        <div class="page-sub">All scan records across all users</div>
+        <div style="margin-bottom:1rem;display:flex;gap:0.5rem;flex-wrap:wrap;" id="log-user-filters">
+          <div class="tag tag-ok" style="cursor:pointer;" onclick="setLogFilter('all')" data-u="all">All Users</div>
+        </div>
+        <div class="data-table-wrap">
+          <div style="overflow-x:auto;">
+            <table><thead><tr><th>#</th><th>Date & Time</th><th>Code</th><th>Product Name</th><th>Category</th><th>BC1</th><th>BC2</th><th>BC3</th><th>BC4</th><th>Tax Rule</th><th>Expiry</th><th>Qty</th><th>User</th></tr></thead>
+            <tbody id="log-tbody"></tbody></table>
+          </div>
+          <div class="empty-state" id="log-empty"><div class="ei">📋</div>No scans recorded yet</div>
+        </div>
+      </div>
+
+      <!-- ── UPLOAD ── -->
+      <div class="admin-tab" id="tab-upload">
+        <div class="page-title">Upload Inventory</div>
+        <div class="page-sub">Upload your product list. Workers will not be able to scan until inventory is loaded.</div>
+
+        <div class="settings-section">
+          <h3>Upload File</h3>
+          <div class="upload-zone" id="admin-drop-zone">
+            <input type="file" id="admin-file-input" accept=".xlsx,.xls,.csv" onchange="handleAdminUpload(this.files[0])"/>
+            <div style="font-size:2rem;margin-bottom:0.5rem;">📊</div>
+            <h3>Drop Excel / CSV here</h3>
+            <p>Supports .xlsx · .xls · .csv</p>
+          </div>
+          <div id="admin-file-loaded" style="display:none;background:rgba(46,204,138,0.08);border:1px solid rgba(46,204,138,0.25);padding:0.85rem 1rem;border-radius:4px;font-family:'IBM Plex Mono',monospace;font-size:0.78rem;margin-bottom:1rem;">
+            <span style="color:var(--green);">✔</span> <span id="admin-file-name"></span> — <span id="admin-file-info" style="color:var(--muted);"></span>
+          </div>
+          <div id="admin-col-map" style="display:none;">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:0.75rem;font-weight:600;">Map Columns</div>
+            <div class="col-grid">
+              <div><div class="col-lbl">Product Code <span>*</span></div><select id="amap-code"></select></div>
+              <div><div class="col-lbl">Product Name <span>*</span></div><select id="amap-name"></select></div>
+              <div><div class="col-lbl">Category</div><select id="amap-cat"><option value="">(none)</option></select></div>
+              <div><div class="col-lbl">Expected Qty</div><select id="amap-qty"><option value="">(none)</option></select></div>
+              <div><div class="col-lbl">Barcode 1</div><select id="amap-bc1"><option value="">(none)</option></select></div>
+              <div><div class="col-lbl">Barcode 2</div><select id="amap-bc2"><option value="">(none)</option></select></div>
+              <div><div class="col-lbl">Barcode 3</div><select id="amap-bc3"><option value="">(none)</option></select></div>
+              <div><div class="col-lbl">Barcode 4</div><select id="amap-bc4"><option value="">(none)</option></select></div>
+              <div><div class="col-lbl">Purchase Tax Rule</div><select id="amap-tax"><option value="">(none)</option></select></div>
+            </div>
+            <button class="btn btn-gold" onclick="confirmAdminUpload()" style="width:auto;">✔ Load Inventory</button>
+          </div>
+        </div>
+
+        <div class="settings-section" id="current-inv-section" style="display:none;">
+          <h3>Current Inventory</h3>
+          <div id="current-inv-info" style="font-family:'IBM Plex Mono',monospace;font-size:0.8rem;margin-bottom:1rem;"></div>
+          <button class="btn btn-red btn-sm" onclick="clearInventory()">✕ Clear Inventory</button>
+        </div>
+      </div>
+
+      <!-- ── EXPORT & MERGE ── -->
+      <div class="admin-tab" id="tab-export">
+        <div class="page-title">Export & Merge</div>
+        <div class="page-sub">Export local data or merge JSON files from multiple devices into one Excel</div>
+
+        <div class="settings-section">
+          <h3>Export This Device's Data</h3>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:0.78rem;color:var(--muted);margin-bottom:1rem;line-height:1.6;">Export the full scan log from this device as an Excel file.</div>
+          <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+            <button class="btn btn-gold btn-sm" onclick="exportExcel()">⬇ Export Excel</button>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h3>Merge Device Files</h3>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:0.78rem;color:var(--muted);margin-bottom:1rem;line-height:1.6;">
+            Each worker taps <strong style="color:var(--text);">⬇ My Data</strong> on their device to download a .json file. Import all those files here to combine into one master Excel.
+          </div>
+          <div class="upload-zone" id="merge-drop" style="padding:1.5rem;">
+            <input type="file" id="merge-input" accept=".json" multiple onchange="handleMergeFiles(this.files)"/>
+            <div style="font-size:1.5rem;margin-bottom:0.35rem;">📂</div>
+            <h3>Drop worker JSON files here</h3>
+            <p>Select multiple files at once</p>
+          </div>
+          <div id="merge-file-list" style="display:none;margin-bottom:1rem;"></div>
+          <div id="merge-summary-box" style="display:none;background:rgba(46,204,138,0.07);border:1px solid rgba(46,204,138,0.2);padding:0.85rem 1rem;border-radius:4px;font-family:'IBM Plex Mono',monospace;font-size:0.78rem;line-height:1.8;margin-bottom:1rem;"></div>
+          <button class="btn btn-green btn-sm" id="merge-export-btn" onclick="exportMerged()" disabled>⬇ Export Combined Excel</button>
+        </div>
+      </div>
+
+      <!-- ── SETTINGS ── */-->
+      <div class="admin-tab" id="tab-settings">
+        <div class="page-title">Settings</div>
+        <div class="page-sub">Manage admin credentials and system options</div>
+
+        <div class="settings-section">
+          <h3>Change Admin Password</h3>
+          <div class="field"><label class="field-label">New Username</label><input type="text" id="new-admin-user" /></div>
+          <div class="field"><label class="field-label">New Password</label><input type="password" id="new-admin-pass" /></div>
+          <div class="field"><label class="field-label">Confirm Password</label><input type="password" id="confirm-admin-pass" /></div>
+          <button class="btn btn-gold btn-sm" onclick="saveAdminCreds()">Save Credentials</button>
+        </div>
+
+        <div class="settings-section">
+          <h3>Danger Zone</h3>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:0.78rem;color:var(--muted);margin-bottom:1rem;line-height:1.6;">Permanently delete all scan records. Inventory will not be affected.</div>
+          <button class="btn btn-red btn-sm" onclick="confirmClear()">✕ Clear All Scan Records</button>
+        </div>
+      </div>
+
+    </div><!-- /admin-content -->
+  </div><!-- /admin-layout -->
+</div>
+
+<!-- ══════════════════════════════════════
+  USER SCAN SCREEN
+══════════════════════════════════════ -->
+<div id="user-screen" class="screen">
+
+  <div class="topbar">
+    <div class="topbar-brand">
+      📦 StockTake <span class="role-tag">SCANNER</span>
+    </div>
+    <div class="topbar-right">
+      <div class="user-pill"><div class="user-dot"></div><span id="user-name-label">—</span></div>
+      <button class="tb-btn" onclick="exportMyData()">⬇ My Data</button>
+      <button class="tb-btn" onclick="logoutUser()">Switch User</button>
+    </div>
+  </div>
+
+  <div class="user-layout">
+
+    <!-- Scan Panel -->
+    <div class="scan-panel">
+
+      <div>
+        <div class="section-label">Scan Barcode</div>
+        <div class="scan-box">
+          <span class="scan-pfx">⬛</span>
+          <input type="text" id="scan-input" placeholder="Scan or type code…" autocomplete="off"/>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-label">Search by Name</div>
+        <div class="inv-search-wrap">
+          <input type="text" id="inv-search" placeholder="Type product name…" oninput="filterInv()" autocomplete="off"/>
+          <div class="inv-results" id="inv-results"></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-label">Product</div>
+        <div class="product-card" id="product-card">
+          <div style="color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:0.75rem;text-align:center;">Awaiting scan…</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-label">Quantity</div>
+        <div class="qty-row">
+          <button class="qty-step" onclick="stepQty(-1)">−</button>
+          <input type="number" id="qty-input" class="qty-main" value="1" min="0"/>
+          <button class="qty-step" onclick="stepQty(1)">+</button>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-label">Expiry Date</div>
+        <input type="date" id="expiry-input" style="width:100%;border-width:2px;border-color:var(--border2);font-size:0.85rem;"/>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:0.62rem;color:var(--muted);margin-top:0.3rem;">Leave blank if not applicable</div>
+      </div>
+
+      <div>
+        <button class="btn btn-green btn-full" id="record-btn" onclick="recordScan()" disabled>✔ Record Scan</button>
+      </div>
+
+      <div style="flex:1;overflow:auto;">
+        <div class="section-label">My Session</div>
+        <div id="session-list">
+          <div style="color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:0.72rem;text-align:center;padding:1rem 0;">No scans yet</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Log Panel -->
+    <div class="log-panel-user">
+      <div class="log-stats">
+        <div class="ls-block"><div class="ls-val" id="u-stat-scans">0</div><div class="ls-lbl">My Scans</div></div>
+        <div class="ls-block"><div class="ls-val" id="u-stat-products">0</div><div class="ls-lbl">Products</div></div>
+        <div class="ls-block"><div class="ls-val" id="u-stat-units">0</div><div class="ls-lbl">Units</div></div>
+      </div>
+      <div class="log-area">
+        <div class="data-table-wrap">
+          <div class="dt-header"><div class="dt-title">My Scan History</div></div>
+          <div style="overflow-x:auto;">
+            <table><thead><tr><th>#</th><th>Time</th><th>Code</th><th>Product</th><th>Expiry</th><th>Qty</th></tr></thead>
+            <tbody id="user-log-tbody"></tbody></table>
+          </div>
+          <div class="empty-state" id="user-log-empty"><div class="ei">📭</div>No scans yet</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── MODALS ── -->
+<div class="overlay" id="dup-overlay">
+  <div class="modal">
+    <h3>⚠ Already Scanned</h3>
+    <div id="dup-info" style="background:var(--bg2);border:1px solid var(--border2);padding:0.85rem 1rem;margin-bottom:1rem;font-family:'IBM Plex Mono',monospace;font-size:0.78rem;line-height:1.8;border-radius:4px;"></div>
+    <p id="dup-q"></p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeDup()">Cancel</button>
+      <button class="btn btn-ghost" id="dup-add-btn" onclick="dupAction('add')">+ Add Up</button>
+      <button class="btn btn-gold" id="dup-rep-btn" onclick="dupAction('replace')">↺ Replace</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="clear-overlay">
+  <div class="modal">
+    <h3>Clear All Scan Records?</h3>
+    <p>This permanently removes all scan data. Inventory will not be affected.</p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="document.getElementById('clear-overlay').classList.remove('open')">Cancel</button>
+      <button class="btn btn-red" onclick="clearAllScans()">Clear</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════
+let inventory   = [];
+let scanLog     = [];
+let currentUser = '';
+let currentRole = ''; // 'admin' | 'user'
+let currentProduct = null;
+let pendingEntry   = null;
+let mergeData      = [];
+let logFilter      = 'all';
+let prodFilter     = 'all';
+let rawHeaders = [], rawRows = [];
+let loadedFileName = '';
+
+// Admin creds stored in localStorage
+function getAdminCreds() {
+  const saved = localStorage.getItem('st_admin_creds');
+  return saved ? JSON.parse(saved) : { user: 'admin', pass: 'admin123' };
+}
+
+// ═══════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════
+window.addEventListener('load', () => {
+  const savedLog = localStorage.getItem('st_log');
+  if (savedLog) scanLog = JSON.parse(savedLog);
+  const savedInv = localStorage.getItem('st_inv');
+  if (savedInv) inventory = JSON.parse(savedInv);
+  loadedFileName = localStorage.getItem('st_fname') || '';
+
+  // Drag & drop for admin upload
+  const dz = document.getElementById('admin-drop-zone');
+  if (dz) {
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+    dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag'); handleAdminUpload(e.dataTransfer.files[0]); });
+  }
+  const md = document.getElementById('merge-drop');
+  if (md) {
+    md.addEventListener('dragover', e => { e.preventDefault(); md.classList.add('drag'); });
+    md.addEventListener('dragleave', () => md.classList.remove('drag'));
+    md.addEventListener('drop', e => { e.preventDefault(); md.classList.remove('drag'); handleMergeFiles(e.dataTransfer.files); });
+  }
+});
+
+// ═══════════════════════════════════════════════
+// SCREENS
+// ═══════════════════════════════════════════════
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ═══════════════════════════════════════════════
+// ADMIN AUTH
+// ═══════════════════════════════════════════════
+function doAdminLogin() {
+  const u = document.getElementById('admin-user-input').value.trim();
+  const p = document.getElementById('admin-pass-input').value;
+  const creds = getAdminCreds();
+  if (u === creds.user && p === creds.pass) {
+    currentRole = 'admin';
+    document.getElementById('admin-name-label').textContent = u.toUpperCase();
+    document.getElementById('admin-login-err').style.display = 'none';
+    document.getElementById('admin-pass-input').value = '';
+    showScreen('admin-screen');
+    refreshAdminDashboard();
+    showCurrentInvInfo();
+  } else {
+    document.getElementById('admin-login-err').style.display = 'block';
+  }
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    if (document.getElementById('admin-login-screen').classList.contains('active')) doAdminLogin();
+    if (document.getElementById('user-login-screen').classList.contains('active')) doUserLogin();
+    if (document.getElementById('user-screen').classList.contains('active') && document.activeElement.id === 'scan-input') handleBarcode();
+    if (document.getElementById('user-screen').classList.contains('active') && document.activeElement.id === 'qty-input') recordScan();
+  }
+});
+
+function logoutAdmin() { currentRole = ''; showScreen('entry-screen'); }
+
+function saveAdminCreds() {
+  const u = document.getElementById('new-admin-user').value.trim();
+  const p = document.getElementById('new-admin-pass').value;
+  const c = document.getElementById('confirm-admin-pass').value;
+  if (!u || !p) { showToast('Fill in username and password', 'err'); return; }
+  if (p !== c) { showToast('Passwords do not match', 'err'); return; }
+  localStorage.setItem('st_admin_creds', JSON.stringify({ user: u, pass: p }));
+  document.getElementById('new-admin-user').value = '';
+  document.getElementById('new-admin-pass').value = '';
+  document.getElementById('confirm-admin-pass').value = '';
+  showToast('Credentials updated ✓', 'ok');
+}
+
+// ═══════════════════════════════════════════════
+// USER AUTH
+// ═══════════════════════════════════════════════
+function doUserLogin() {
+  if (!inventory.length) { showToast('No inventory loaded. Contact admin.', 'err'); return; }
+  const name = document.getElementById('user-name-input').value.trim();
+  if (!name) { showToast('Enter your name', 'err'); return; }
+  currentUser = name;
+  currentRole = 'user';
+  document.getElementById('user-name-label').textContent = name;
+  document.getElementById('user-name-input').value = '';
+  showScreen('user-screen');
+  document.getElementById('scan-input').focus();
+  renderUserLog();
+  updateUserStats();
+  renderSession();
+}
+
+// Show warning if no inventory
+document.getElementById('user-login-screen').addEventListener('transitionend', checkInvWarning);
+function checkInvWarning() {
+  document.getElementById('no-inv-warning').style.display = inventory.length ? 'none' : 'block';
+}
+
+function logoutUser() { currentUser = ''; currentRole = ''; showScreen('entry-screen'); }
+
+// ═══════════════════════════════════════════════
+// ADMIN TABS
+// ═══════════════════════════════════════════════
+function switchTab(name, el) {
+  document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.sidebar-item').forEach(s => s.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  el.classList.add('active');
+  if (name === 'overview') refreshOverview();
+  if (name === 'users')    refreshUsers();
+  if (name === 'products') refreshProducts();
+  if (name === 'expiry')   refreshExpiry();
+  if (name === 'log')      refreshLog();
+}
+
+// ═══════════════════════════════════════════════
+// ADMIN DASHBOARD REFRESH
+// ═══════════════════════════════════════════════
+function refreshAdminDashboard() { refreshOverview(); }
+
+function refreshOverview() {
+  document.getElementById('ov-total').textContent    = scanLog.length;
+  document.getElementById('ov-products').textContent = new Set(scanLog.map(e=>e.code)).size;
+  document.getElementById('ov-units').textContent    = scanLog.reduce((s,e)=>s+(e.qty||0),0);
+  document.getElementById('ov-users').textContent    = new Set(scanLog.map(e=>e.user)).size;
+  document.getElementById('ov-inv').textContent      = inventory.length;
+  const alerts = countExpiryAlerts();
+  document.getElementById('ov-alerts').textContent   = alerts;
+  const coverage = inventory.length ? Math.round(new Set(scanLog.map(e=>e.code)).size / inventory.length * 100) : 0;
+  document.getElementById('ov-coverage').textContent = coverage + '%';
+  const date = new Date().toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  document.getElementById('overview-sub').textContent = `Stock take in progress · ${date}`;
+
+  // Recent scans
+  const tbody = document.getElementById('recent-tbody');
+  const recent = scanLog.slice(0,10);
+  if (!recent.length) { tbody.innerHTML=''; document.getElementById('recent-empty').style.display='block'; return; }
+  document.getElementById('recent-empty').style.display='none';
+  tbody.innerHTML = recent.map(e=>`
+    <tr>
+      <td style="color:var(--muted)">${e.time}</td>
+      <td class="td-name">${e.name} <span style="color:var(--muted);font-size:0.7rem;">(${e.code})</span></td>
+      <td><span class="tag tag-qty">${e.qty}</span></td>
+      <td><span class="tag tag-user">${e.user}</span></td>
+      <td>${fmtExpiry(e.expiry)}</td>
+    </tr>`).join('');
+}
+
+function refreshUsers() {
+  const tbody = document.getElementById('users-tbody');
+  const users = [...new Set(scanLog.map(e=>e.user))];
+  if (!users.length) { tbody.innerHTML=''; document.getElementById('users-empty').style.display='block'; return; }
+  document.getElementById('users-empty').style.display='none';
+
+  const now = Date.now();
+  tbody.innerHTML = users.map(u => {
+    const uScans = scanLog.filter(e=>e.user===u);
+    const qty    = uScans.reduce((s,e)=>s+(e.qty||0),0);
+    const prods  = new Set(uScans.map(e=>e.code)).size;
+    const last   = uScans[0];
+    const lastDt = last ? `${last.date} ${last.time}` : '—';
+    // "active" = scanned in last 2 hours (based on id timestamp)
+    const active = last && (now - last.id) < 7200000;
+    return `<tr>
+      <td class="td-name">${u}</td>
+      <td>${uScans.length}</td>
+      <td><span class="tag tag-qty">${qty}</span></td>
+      <td>${prods}</td>
+      <td style="color:var(--muted)">${lastDt}</td>
+      <td>${active ? '<span class="tag tag-ok">● Active</span>' : '<span class="tag" style="background:rgba(107,107,154,0.1);color:var(--muted);border:1px solid var(--border2);">Idle</span>'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function refreshProducts() {
+  const tbody = document.getElementById('products-tbody');
+  if (!inventory.length) { tbody.innerHTML=''; document.getElementById('products-empty').style.display='block'; return; }
+  document.getElementById('products-empty').style.display='none';
+
+  // Build map of counted qty per product
+  const counted = {};
+  const scannedBy = {};
+  scanLog.forEach(e => {
+    counted[e.code] = (counted[e.code]||0) + (e.qty||0);
+    if (!scannedBy[e.code]) scannedBy[e.code] = new Set();
+    scannedBy[e.code].add(e.user);
+  });
+
+  let rows = inventory.map(p => {
+    const c = counted[p.code] || 0;
+    const exp = p.expected || 0;
+    const diff = exp ? c - exp : null;
+    const pct = exp ? Math.min(Math.round(c/exp*100),100) : (c>0?100:0);
+    return { p, c, exp, diff, pct, users: scannedBy[p.code] ? [...scannedBy[p.code]].join(', ') : '—' };
+  });
+
+  if (prodFilter === 'done')    rows = rows.filter(r => r.c > 0);
+  if (prodFilter === 'pending') rows = rows.filter(r => r.c === 0);
+
+  if (!rows.length) { tbody.innerHTML=`<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:2rem;">No products match filter</td></tr>`; return; }
+
+  tbody.innerHTML = rows.map(({p,c,exp,diff,pct,users}) => {
+    const barClass = pct>=100 ? 'over' : pct>=80 ? '' : pct>0 ? 'warn' : 'warn';
+    const diffTag = diff===null ? '<span style="color:var(--muted)">—</span>'
+      : diff===0 ? '<span class="tag tag-ok">✓ 0</span>'
+      : diff>0   ? `<span class="tag tag-amber">+${diff}</span>`
+      : `<span class="tag tag-warn">${diff}</span>`;
+    return `<tr>
+      <td style="color:var(--accent)">${p.code}</td>
+      <td class="td-name">${p.name}</td>
+      <td style="color:var(--muted)">${p.category||'—'}</td>
+      <td>${exp||'—'}</td>
+      <td><span class="tag tag-qty">${c}</span></td>
+      <td>${diffTag}</td>
+      <td style="min-width:120px;">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:0.7rem;color:var(--muted);margin-bottom:3px;">${pct}%</div>
+        <div class="prog-wrap"><div class="prog-bar ${barClass}" style="width:${pct}%"></div></div>
+      </td>
+      <td style="color:var(--muted);font-size:0.72rem;">${users}</td>
+    </tr>`;
+  }).join('');
+}
+
+function filterProducts(f) {
+  prodFilter = f;
+  ['all','done','pending'].forEach(x => {
+    const el = document.getElementById('pf-'+x);
+    if (el) el.style.opacity = x===f ? '1' : '0.45';
+  });
+  refreshProducts();
+}
+
+function refreshExpiry() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const expired = [], soon = [];
+
+  // Collect unique product+expiry combos from scan log
+  const seen = new Set();
+  scanLog.forEach(e => {
+    if (!e.expiry) return;
+    const key = e.code + '|' + e.expiry;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const parts = e.expiry.split('/');
+    if (parts.length !== 3) return;
+    const d = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+    const diff = Math.floor((d-today)/(1000*60*60*24));
+    if (diff < 0) expired.push({...e, diff});
+    else if (diff <= 30) soon.push({...e, diff});
+  });
+
+  const totalAlerts = expired.length + soon.length;
+  document.getElementById('expiry-empty').style.display = totalAlerts ? 'none' : 'block';
+  document.getElementById('expiry-expired-section').style.display = expired.length ? 'block' : 'none';
+  document.getElementById('expiry-soon-section').style.display = soon.length ? 'block' : 'none';
+
+  document.getElementById('expiry-expired-list').innerHTML = expired.map(e=>`
+    <div class="alert-item red">
+      <span class="alert-icon">🔴</span>
+      <div class="alert-text">
+        <strong>${e.name}</strong> (${e.code})
+        <small>Expired: ${e.expiry} · Scanned by ${e.user} · Qty: ${e.qty}</small>
+      </div>
+      <span class="tag tag-warn">EXPIRED</span>
+    </div>`).join('');
+
+  document.getElementById('expiry-soon-list').innerHTML = soon.map(e=>`
+    <div class="alert-item amber">
+      <span class="alert-icon">🟡</span>
+      <div class="alert-text">
+        <strong>${e.name}</strong> (${e.code})
+        <small>Expires: ${e.expiry} · In ${e.diff} day${e.diff!==1?'s':''} · Scanned by ${e.user} · Qty: ${e.qty}</small>
+      </div>
+      <span class="tag tag-amber">${e.diff}d</span>
+    </div>`).join('');
+}
+
+function refreshLog() {
+  // Update user filter pills
+  const bar = document.getElementById('log-user-filters');
+  const users = [...new Set(scanLog.map(e=>e.user))];
+  bar.innerHTML = `<div class="tag tag-ok" style="cursor:pointer;opacity:${logFilter==='all'?1:0.5};" onclick="setLogFilter('all')" data-u="all">All Users</div>`;
+  users.forEach(u => {
+    bar.innerHTML += `<div class="tag tag-user" style="cursor:pointer;opacity:${logFilter===u?1:0.5};" onclick="setLogFilter('${u}')" data-u="${u}">${u}</div>`;
+  });
+
+  const filtered = logFilter==='all' ? scanLog : scanLog.filter(e=>e.user===logFilter);
+  const tbody = document.getElementById('log-tbody');
+  if (!filtered.length) { tbody.innerHTML=''; document.getElementById('log-empty').style.display='block'; return; }
+  document.getElementById('log-empty').style.display='none';
+  tbody.innerHTML = filtered.map((e,i)=>`
+    <tr>
+      <td style="color:var(--muted)">${filtered.length-i}</td>
+      <td>${e.date} <span style="color:var(--muted)">${e.time}</span></td>
+      <td style="color:var(--accent)">${e.code}</td>
+      <td class="td-name">${e.name}</td>
+      <td style="color:var(--muted)">${e.category||'—'}</td>
+      <td style="color:var(--muted)">${e.bc1||'—'}</td>
+      <td style="color:var(--muted)">${e.bc2||'—'}</td>
+      <td style="color:var(--muted)">${e.bc3||'—'}</td>
+      <td style="color:var(--muted)">${e.bc4||'—'}</td>
+      <td style="color:var(--muted)">${e.tax||'—'}</td>
+      <td>${fmtExpiry(e.expiry)}</td>
+      <td><span class="tag tag-qty">${e.qty}</span></td>
+      <td><span class="tag tag-user">${e.user}</span></td>
+    </tr>`).join('');
+}
+
+function setLogFilter(u) {
+  logFilter = u;
+  refreshLog();
+}
+
+function countExpiryAlerts() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const seen = new Set();
+  let count = 0;
+  scanLog.forEach(e => {
+    if (!e.expiry) return;
+    const key = e.code+'|'+e.expiry;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const parts = e.expiry.split('/');
+    if (parts.length!==3) return;
+    const d = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+    const diff = Math.floor((d-today)/(1000*60*60*24));
+    if (diff <= 30) count++;
+  });
+  return count;
+}
+
+// ═══════════════════════════════════════════════
+// ADMIN UPLOAD
+// ═══════════════════════════════════════════════
+function handleAdminUpload(file) {
+  if (!file) return;
+  loadedFileName = file.name;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const data = new Uint8Array(ev.target.result);
+    const wb = XLSX.read(data, {type:'array'});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const json = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+    if (!json.length) { showToast('File appears empty','err'); return; }
+    rawHeaders = json[0].map(String);
+    rawRows = json.slice(1).filter(r=>r.some(c=>c!==''));
+    document.getElementById('admin-file-loaded').style.display='block';
+    document.getElementById('admin-file-name').textContent = file.name;
+    document.getElementById('admin-file-info').textContent = `${rawRows.length} rows · ${rawHeaders.length} columns`;
+    buildAdminColSelects();
+    document.getElementById('admin-col-map').style.display='block';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function buildAdminColSelects() {
+  const maps = {
+    'amap-code':['product code','sku','item code','code','id'],
+    'amap-name':['product name','name','description','item name'],
+    'amap-cat': ['category','cat','group','dept','type'],
+    'amap-qty': ['expected qty','expected','qty','quantity','stock'],
+    'amap-bc1': ['barcode 1','barcode1','ean','upc','barcode'],
+    'amap-bc2': ['barcode 2','barcode2'],
+    'amap-bc3': ['barcode 3','barcode3'],
+    'amap-bc4': ['barcode 4','barcode4'],
+    'amap-tax': ['purchase tax','tax rule','tax','gst','vat']
+  };
+  Object.entries(maps).forEach(([id, guesses]) => {
+    const sel = document.getElementById(id);
+    const req = id==='amap-code'||id==='amap-name';
+    sel.innerHTML = req ? '' : '<option value="">(none)</option>';
+    rawHeaders.forEach((h,i) => {
+      const o = document.createElement('option');
+      o.value=i; o.textContent=h||`Col ${i+1}`; sel.appendChild(o);
+    });
+    const m = rawHeaders.findIndex(h=>guesses.some(k=>h.toLowerCase().includes(k)));
+    if (m>-1) sel.value=m;
+  });
+}
+
+function confirmAdminUpload() {
+  const get = id => { const v=document.getElementById(id).value; return v!==''?parseInt(v):null; };
+  const codeIdx=get('amap-code'), nameIdx=get('amap-name');
+  const catIdx=get('amap-cat'), qtyIdx=get('amap-qty');
+  const bc1=get('amap-bc1'),bc2=get('amap-bc2'),bc3=get('amap-bc3'),bc4=get('amap-bc4'),tax=get('amap-tax');
+  if (codeIdx===null||nameIdx===null) { showToast('Map Code & Name columns','err'); return; }
+
+  inventory = rawRows.map(row=>({
+    code:     String(row[codeIdx]??'').trim(),
+    name:     String(row[nameIdx]??'').trim(),
+    category: catIdx!==null?String(row[catIdx]??'').trim():'',
+    expected: qtyIdx!==null?(parseFloat(row[qtyIdx])||0):0,
+    bc1:      bc1!==null?String(row[bc1]??'').trim():'',
+    bc2:      bc2!==null?String(row[bc2]??'').trim():'',
+    bc3:      bc3!==null?String(row[bc3]??'').trim():'',
+    bc4:      bc4!==null?String(row[bc4]??'').trim():'',
+    tax:      tax!==null?String(row[tax]??'').trim():'',
+  })).filter(p=>p.code&&p.name);
+
+  localStorage.setItem('st_inv', JSON.stringify(inventory));
+  localStorage.setItem('st_fname', loadedFileName);
+  showToast(`✔ ${inventory.length} products loaded`,'ok');
+  document.getElementById('admin-col-map').style.display='none';
+  showCurrentInvInfo();
+  refreshAdminDashboard();
+}
+
+function showCurrentInvInfo() {
+  const sec = document.getElementById('current-inv-section');
+  if (!inventory.length) { sec.style.display='none'; return; }
+  sec.style.display='block';
+  document.getElementById('current-inv-info').innerHTML =
+    `<strong>${inventory.length}</strong> products loaded from <strong>${loadedFileName||'unknown file'}</strong>`;
+}
+
+function clearInventory() {
+  inventory = [];
+  localStorage.removeItem('st_inv');
+  localStorage.removeItem('st_fname');
+  showCurrentInvInfo();
+  showToast('Inventory cleared','warn');
+}
+
+// ═══════════════════════════════════════════════
+// USER SCAN LOGIC
+// ═══════════════════════════════════════════════
+function handleBarcode() {
+  const val = document.getElementById('scan-input').value.trim();
+  if (!val) return;
+  pickProduct(val);
+}
+
+function pickProduct(code) {
+  const q = code.toLowerCase();
+  const p = inventory.find(p=>
+    p.code.toLowerCase()===q ||
+    (p.bc1&&p.bc1.toLowerCase()===q)||
+    (p.bc2&&p.bc2.toLowerCase()===q)||
+    (p.bc3&&p.bc3.toLowerCase()===q)||
+    (p.bc4&&p.bc4.toLowerCase()===q)
+  );
+  const card = document.getElementById('product-card');
+  const btn  = document.getElementById('record-btn');
+
+  if (p) {
+    currentProduct = p;
+    const bcs = [p.bc1,p.bc2,p.bc3,p.bc4].filter(Boolean);
+    card.className = 'product-card found';
+    card.innerHTML = `
+      <div class="pc-badge">${p.code}</div>
+      <div class="pc-name">${p.name}</div>
+      <div class="pc-meta">
+        ${p.category?`<span>📁 ${p.category}</span>`:''}
+        ${p.expected?`<span>📊 Exp: ${p.expected}</span>`:''}
+        ${p.tax?`<span>🧾 ${p.tax}</span>`:''}
+        ${bcs.length?`<span>🔲 ${bcs.join(' · ')}</span>`:''}
+      </div>`;
+    btn.disabled = false;
+    document.getElementById('qty-input').focus();
+    document.getElementById('qty-input').select();
+  } else {
+    currentProduct = null;
+    card.className = 'product-card not-found';
+    card.innerHTML = `<div style="color:var(--red);font-family:'IBM Plex Mono',monospace;font-size:0.75rem;">⚠ "<strong>${code}</strong>" not found in inventory</div>`;
+    btn.disabled = true;
+  }
+  document.getElementById('inv-results').style.display='none';
+  document.getElementById('inv-search').value='';
+}
+
+function filterInv() {
+  const q = document.getElementById('inv-search').value.trim().toLowerCase();
+  const res = document.getElementById('inv-results');
+  if (!q) { res.style.display='none'; return; }
+  const matches = inventory.filter(p=>p.name.toLowerCase().includes(q)||p.code.toLowerCase().includes(q)).slice(0,8);
+  if (!matches.length) { res.style.display='none'; return; }
+  res.innerHTML = matches.map(p=>`
+    <div class="inv-item" onclick="pickProduct('${p.code}');document.getElementById('scan-input').value='${p.code}'">
+      <span>${p.name}</span><span class="ic">${p.code}</span>
+    </div>`).join('');
+  res.style.display='block';
+}
+
+function stepQty(d) {
+  const i = document.getElementById('qty-input');
+  i.value = Math.max(0,(parseInt(i.value)||0)+d);
+}
+
+function recordScan() {
+  if (!currentProduct) return;
+  const qty = parseInt(document.getElementById('qty-input').value)||0;
+  const expiryRaw = document.getElementById('expiry-input').value;
+  const expiry = expiryRaw ? new Date(expiryRaw).toLocaleDateString('en-AU') : '';
+  const now = new Date();
+
+  const entry = {
+    id: Date.now(),
+    date: now.toLocaleDateString('en-AU'),
+    time: now.toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',second:'2-digit'}),
+    code: currentProduct.code, name: currentProduct.name,
+    category: currentProduct.category, expected: currentProduct.expected,
+    bc1:currentProduct.bc1||'', bc2:currentProduct.bc2||'',
+    bc3:currentProduct.bc3||'', bc4:currentProduct.bc4||'',
+    tax:currentProduct.tax||'', expiry, qty, user:currentUser
+  };
+
+  // Duplicate check — ANY existing entry for this product (any user)
+  const existIdx = scanLog.findIndex(e=>e.code===entry.code);
+  if (existIdx > -1) {
+    const ex = scanLog[existIdx];
+    const sameUser = ex.user === currentUser;
+    pendingEntry = {entry, existIdx};
+    document.getElementById('dup-info').innerHTML =
+      `<div style="font-weight:700;margin-bottom:0.35rem;font-size:0.9rem;">${ex.name} <span style="color:var(--muted);font-weight:400;">(${ex.code})</span></div>` +
+      `<div>Previously scanned by <strong style="color:var(--accent)">${ex.user}</strong>${sameUser?' (you)':''} &nbsp;·&nbsp; ${ex.date} at ${ex.time}</div>` +
+      `<div>Previously recorded qty: <strong style="color:var(--red)">${ex.qty}</strong></div>` +
+      `<div>New qty entered by <strong style="color:var(--accent)">${currentUser}</strong>: <strong style="color:var(--green)">${entry.qty}</strong></div>` +
+      (ex.expiry?`<div style="margin-top:0.2rem;">Previous expiry: ${ex.expiry}</div>`:'');
+    document.getElementById('dup-q').textContent =
+      `Replace (overwrite ${ex.qty} → ${entry.qty}) or Add Up (${ex.qty} + ${entry.qty} = ${ex.qty+entry.qty})?`;
+    document.getElementById('dup-add-btn').textContent = `+ Add Up → ${ex.qty+entry.qty}`;
+    document.getElementById('dup-rep-btn').textContent  = `↺ Replace → ${entry.qty}`;
+    document.getElementById('dup-overlay').classList.add('open');
+    return;
+  }
+  commitEntry(entry);
+}
+
+function closeDup() { document.getElementById('dup-overlay').classList.remove('open'); pendingEntry=null; }
+
+function dupAction(action) {
+  if (!pendingEntry) return;
+  const {entry, existIdx} = pendingEntry;
+  const ex = scanLog[existIdx];
+  if (action==='add') {
+    entry.qty = ex.qty + entry.qty;
+    // Keep expiry from new scan if provided, otherwise keep old
+    entry.expiry = entry.expiry || ex.expiry;
+  }
+  // Always record who last updated it
+  entry.user = currentUser;
+  entry.lastUpdatedBy = currentUser;
+  entry.previousUser = ex.user;
+  scanLog.splice(existIdx, 1);
+  document.getElementById('dup-overlay').classList.remove('open');
+  pendingEntry = null;
+  commitEntry(entry);
+  showToast(action==='add'
+    ? `✔ Added up → ${entry.qty}× ${entry.name}`
+    : `↺ Replaced → ${entry.qty}× ${entry.name}`, 'ok');
+}
+
+function commitEntry(entry) {
+  scanLog.unshift(entry);
+  localStorage.setItem('st_log', JSON.stringify(scanLog));
+  currentProduct = null;
+  document.getElementById('scan-input').value='';
+  document.getElementById('qty-input').value=1;
+  document.getElementById('expiry-input').value='';
+  document.getElementById('product-card').className='product-card';
+  document.getElementById('product-card').innerHTML=`<div style="color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:0.75rem;text-align:center;">Awaiting scan…</div>`;
+  document.getElementById('record-btn').disabled=true;
+  document.getElementById('scan-input').focus();
+  renderUserLog();
+  updateUserStats();
+  renderSession();
+  if (!pendingEntry) showToast(`✔ ${entry.qty}× ${entry.name}`,'ok');
+}
+
+// ═══════════════════════════════════════════════
+// USER RENDER
+// ═══════════════════════════════════════════════
+function renderUserLog() {
+  const myScans = scanLog.filter(e=>e.user===currentUser);
+  const tbody = document.getElementById('user-log-tbody');
+  if (!myScans.length) { tbody.innerHTML=''; document.getElementById('user-log-empty').style.display='block'; return; }
+  document.getElementById('user-log-empty').style.display='none';
+  tbody.innerHTML = myScans.map((e,i)=>`
+    <tr>
+      <td style="color:var(--muted)">${myScans.length-i}</td>
+      <td style="color:var(--muted)">${e.time}</td>
+      <td style="color:var(--accent)">${e.code}</td>
+      <td class="td-name">${e.name}</td>
+      <td>${fmtExpiry(e.expiry)}</td>
+      <td><span class="tag tag-qty">${e.qty}</span></td>
+    </tr>`).join('');
+}
+
+function updateUserStats() {
+  const myScans = scanLog.filter(e=>e.user===currentUser);
+  document.getElementById('u-stat-scans').textContent    = myScans.length;
+  document.getElementById('u-stat-products').textContent = new Set(myScans.map(e=>e.code)).size;
+  document.getElementById('u-stat-units').textContent    = myScans.reduce((s,e)=>s+(e.qty||0),0);
+}
+
+function renderSession() {
+  const myScans = scanLog.filter(e=>e.user===currentUser);
+  const list = document.getElementById('session-list');
+  if (!myScans.length) { list.innerHTML=`<div style="color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:0.72rem;text-align:center;padding:0.75rem 0;">No scans yet</div>`; return; }
+  const g={};
+  myScans.forEach(e=>{ if(!g[e.code]) g[e.code]={name:e.name,qty:0,n:0}; g[e.code].qty+=e.qty; g[e.code].n++; });
+  list.innerHTML=Object.entries(g).map(([code,d])=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:0.45rem 0;border-bottom:1px solid var(--border);">
+      <div>
+        <div style="font-size:0.8rem;font-weight:600;">${d.name}</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:0.62rem;color:var(--muted);">${code} · ${d.n} scan${d.n>1?'s':''}</div>
+      </div>
+      <span class="tag tag-qty">${d.qty}</span>
+    </div>`).join('');
+}
+
+// ═══════════════════════════════════════════════
+// EXPIRY FORMAT
+// ═══════════════════════════════════════════════
+function fmtExpiry(expiry) {
+  if (!expiry) return `<span style="color:var(--muted)">—</span>`;
+  const parts = expiry.split('/');
+  if (parts.length!==3) return `<span style="color:var(--muted)">${expiry}</span>`;
+  const d = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const diff = Math.floor((d-today)/(1000*60*60*24));
+  if (diff<0)   return `<span style="background:rgba(240,80,96,0.15);color:var(--red);padding:0.1rem 0.45rem;border-radius:2px;font-size:0.68rem;font-weight:700;">EXPIRED</span>`;
+  if (diff<=30) return `<span style="background:rgba(240,192,64,0.12);color:var(--accent);padding:0.1rem 0.45rem;border-radius:2px;font-size:0.68rem;font-weight:700;">⚠ ${expiry}</span>`;
+  return `<span style="color:var(--green)">${expiry}</span>`;
+}
+
+// ═══════════════════════════════════════════════
+// DEDUPLICATE SCANLOG FOR EXPORT
+// One row per product — latest entry wins for metadata, qty summed
+// ═══════════════════════════════════════════════
+function deduplicateForExport(log) {
+  const map = {};
+  // Process oldest first so newest overwrites metadata
+  [...log].reverse().forEach(e => {
+    if (!map[e.code]) {
+      map[e.code] = { ...e };
+    } else {
+      // Same product seen again — add qty, keep latest metadata
+      map[e.code].qty += (e.qty || 0);
+      // Keep most recent scan's user, time, expiry (if provided)
+      if (e.expiry) map[e.code].expiry = e.expiry;
+      map[e.code].user = e.user;
+      map[e.code].time = e.time;
+      map[e.code].date = e.date;
+    }
+  });
+  return Object.values(map);
+}
+function exportMyData() {
+  if (!scanLog.filter(e=>e.user===currentUser).length) { showToast('No scans to export','err'); return; }
+  const myScans = scanLog.filter(e=>e.user===currentUser);
+  const payload = {version:1, exportedAt:new Date().toISOString(), user:currentUser, file:loadedFileName, entries:myScans};
+  const blob = new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=`stocktake_${currentUser.replace(/[^a-z0-9]/gi,'_').toLowerCase()}_${new Date().toISOString().slice(0,10)}.json`;
+  a.click(); URL.revokeObjectURL(a.href);
+  showToast(`✔ ${currentUser}'s data exported`,'ok');
+}
+
+function exportExcel() {
+  if (!scanLog.length) { showToast('No data to export','err'); return; }
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1: Raw scan log (every action recorded)
+  const logData = [
+    ['Date','Time','Product Code','Product Name','Category','Barcode 1','Barcode 2','Barcode 3','Barcode 4','Purchase Tax Rule','Expiry Date','Expected Qty','Counted Qty','Scanned By'],
+    ...scanLog.map(e=>[e.date,e.time,e.code,e.name,e.category||'',e.bc1||'',e.bc2||'',e.bc3||'',e.bc4||'',e.tax||'',e.expiry||'',e.expected||'',e.qty,e.user])
+  ];
+
+  // Sheet 2: ONE ROW PER PRODUCT — qty merged/deduplicated
+  const deduped = deduplicateForExport(scanLog);
+  const sumData = [
+    ['Product Code','Product Name','Category','Barcode 1','Barcode 2','Barcode 3','Barcode 4','Purchase Tax Rule','Expiry Date','Expected Qty','Total Counted','Difference','Last Scanned By'],
+    ...deduped.map(e=>[e.code,e.name,e.category||'',e.bc1||'',e.bc2||'',e.bc3||'',e.bc4||'',e.tax||'',e.expiry||'',e.expected||'',e.qty,e.expected?(e.qty-e.expected):'',e.user])
+  ];
+
+  // Sheet 3: User summary
+  const uMap={};
+  scanLog.forEach(e=>{ if(!uMap[e.user]) uMap[e.user]={n:0,qty:0,p:new Set()}; uMap[e.user].n++; uMap[e.user].qty+=e.qty||0; uMap[e.user].p.add(e.code); });
+  const uData=[['User','Scans','Units','Unique Products'],...Object.entries(uMap).map(([u,d])=>[u,d.n,d.qty,d.p.size])];
+
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(logData),'Scan Log');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(sumData),'Product Summary');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(uData),'User Summary');
+  XLSX.writeFile(wb,`stocktake_${new Date().toISOString().slice(0,10)}.xlsx`);
+  showToast('Excel exported ✓','ok');
+}
+
+// ═══════════════════════════════════════════════
+// MERGE
+// ═══════════════════════════════════════════════
+function handleMergeFiles(files) {
+  mergeData=[];
+  document.getElementById('merge-file-list').innerHTML='';
+  document.getElementById('merge-file-list').style.display='none';
+  document.getElementById('merge-summary-box').style.display='none';
+  document.getElementById('merge-export-btn').disabled=true;
+  let loaded=0;
+  Array.from(files).forEach(file=>{
+    const r=new FileReader();
+    r.onload=ev=>{
+      try {
+        const parsed=JSON.parse(ev.target.result);
+        const entries=parsed.entries||(Array.isArray(parsed)?parsed:[]);
+        mergeData.push(...entries);
+        document.getElementById('merge-file-list').innerHTML+=`<div class="file-chip"><span>📄 ${file.name}</span><span style="color:var(--green);font-weight:600;">${entries.length} scans</span></div>`;
+      } catch {
+        document.getElementById('merge-file-list').innerHTML+=`<div class="file-chip" style="border-color:var(--red);color:var(--red);">⚠ ${file.name} — invalid</div>`;
+      }
+      loaded++;
+      if (loaded===files.length) {
+        document.getElementById('merge-file-list').style.display='block';
+        if (mergeData.length) {
+          const users=[...new Set(mergeData.map(e=>e.user))];
+          const prods=new Set(mergeData.map(e=>e.code));
+          const qty=mergeData.reduce((s,e)=>s+(e.qty||0),0);
+          document.getElementById('merge-summary-box').style.display='block';
+          document.getElementById('merge-summary-box').innerHTML=
+            `<div style="color:var(--green);font-weight:700;margin-bottom:0.35rem;">✔ Ready to merge</div>`+
+            `<div>👥 Users: <strong>${users.join(', ')}</strong></div>`+
+            `<div>📦 Total entries: <strong>${mergeData.length}</strong> · Products: <strong>${prods.size}</strong> · Units: <strong>${qty}</strong></div>`;
+          document.getElementById('merge-export-btn').disabled=false;
+        }
+      }
+    };
+    r.readAsText(file);
+  });
+}
+
+function exportMerged() {
+  if (!mergeData.length) return;
+  const sorted=[...mergeData].sort((a,b)=>a.id-b.id);
+  const wb=XLSX.utils.book_new();
+
+  // Sheet 1: Raw combined log
+  const logData=[
+    ['Date','Time','Product Code','Product Name','Category','Barcode 1','Barcode 2','Barcode 3','Barcode 4','Tax Rule','Expiry Date','Expected Qty','Counted Qty','Scanned By'],
+    ...sorted.map(e=>[e.date,e.time,e.code,e.name,e.category||'',e.bc1||'',e.bc2||'',e.bc3||'',e.bc4||'',e.tax||'',e.expiry||'',e.expected||'',e.qty,e.user])
+  ];
+
+  // Sheet 2: ONE ROW PER PRODUCT — qty merged/deduplicated across all devices
+  const deduped = deduplicateForExport(sorted);
+  const sumData=[
+    ['Product Code','Product Name','Category','Barcode 1','Barcode 2','Barcode 3','Barcode 4','Tax Rule','Expiry Date','Expected Qty','Total Counted','Difference','Last Scanned By'],
+    ...deduped.map(e=>[e.code,e.name,e.category||'',e.bc1||'',e.bc2||'',e.bc3||'',e.bc4||'',e.tax||'',e.expiry||'',e.expected||'',e.qty,e.expected?(e.qty-e.expected):'',e.user])
+  ];
+
+  // Sheet 3: User summary
+  const uMap={};
+  sorted.forEach(e=>{ if(!uMap[e.user]) uMap[e.user]={n:0,qty:0,p:new Set()}; uMap[e.user].n++; uMap[e.user].qty+=e.qty||0; uMap[e.user].p.add(e.code); });
+  const uData=[['User','Scans','Units','Products'],...Object.entries(uMap).map(([u,d])=>[u,d.n,d.qty,d.p.size])];
+
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(logData),'Combined Scan Log');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(sumData),'Product Summary');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(uData),'User Summary');
+  XLSX.writeFile(wb,`stocktake_COMBINED_${new Date().toISOString().slice(0,10)}.xlsx`);
+  showToast('✔ Combined Excel exported!','ok');
+  mergeData=[];
+  document.getElementById('merge-file-list').style.display='none';
+  document.getElementById('merge-summary-box').style.display='none';
+  document.getElementById('merge-export-btn').disabled=true;
+  document.getElementById('merge-input').value='';
+}
+
+// ═══════════════════════════════════════════════
+// CLEAR
+// ═══════════════════════════════════════════════
+function confirmClear() { document.getElementById('clear-overlay').classList.add('open'); }
+function clearAllScans() {
+  scanLog=[];
+  localStorage.removeItem('st_log');
+  document.getElementById('clear-overlay').classList.remove('open');
+  refreshAdminDashboard();
+  showToast('All scan records cleared','warn');
+}
+
+// ═══════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════
+let _tt;
+function showToast(msg,type='ok'){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className=`show ${type}`;
+  clearTimeout(_tt); _tt=setTimeout(()=>t.className='',3000);
+}
+</script>
+</body>
+</html>

@@ -2,7 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="StockTake">
+<meta name="theme-color" content="#0a0a0f">
+<link rel="manifest" href="manifest.json">
 <title>StockTake Pro</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
@@ -267,6 +273,17 @@ tbody tr:last-child td{border-bottom:none;}
 #saving.show{display:flex;}
 .mini-spin{width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 0.6s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
+/* PWA INSTALL BANNER */
+#install-banner{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:2px solid var(--gold);padding:1rem 1.25rem;z-index:300;flex-direction:column;gap:0.75rem;box-shadow:0 -8px 32px var(--shadow);}
+#install-banner.show{display:flex;}
+.ib-top{display:flex;align-items:center;gap:0.75rem;}
+.ib-icon{font-size:2rem;}
+.ib-text{flex:1;}
+.ib-title{font-family:'Bebas Neue',sans-serif;font-size:1.2rem;letter-spacing:0.05em;color:var(--gold);}
+.ib-sub{font-family:'IBM Plex Mono',monospace;font-size:0.65rem;color:var(--muted);}
+.ib-btns{display:flex;gap:0.6rem;}
+.ib-install{flex:1;background:var(--gold);color:#150e00;border:none;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:0.78rem;letter-spacing:0.06em;padding:0.7rem;cursor:pointer;border-radius:3px;text-transform:uppercase;}
+.ib-dismiss{background:transparent;color:var(--muted);border:1px solid var(--border);font-family:'IBM Plex Mono',monospace;font-size:0.72rem;padding:0.7rem 1rem;cursor:pointer;border-radius:3px;}
 </style>
 </head>
 <body>
@@ -680,6 +697,21 @@ create policy "public" on config for all using (true) with check (true);</code>
 
 <div id="saving"><div class="mini-spin"></div>Saving…</div>
 <div id="toast"></div>
+
+<!-- PWA INSTALL BANNER -->
+<div id="install-banner">
+  <div class="ib-top">
+    <div class="ib-icon">📦</div>
+    <div class="ib-text">
+      <div class="ib-title">Install StockTake Pro</div>
+      <div class="ib-sub">Add to home screen for the full app experience</div>
+    </div>
+  </div>
+  <div class="ib-btns">
+    <button class="ib-install" onclick="installApp()">⬇ Install App</button>
+    <button class="ib-dismiss" onclick="dismissInstall()">Not now</button>
+  </div>
+</div>
 
 <script>
 // ═══════════════════════════════════════════════════
@@ -1157,6 +1189,48 @@ function stopCamera(){
     html5Qr.stop().catch(function(){});
     html5Qr=null;
   }
+}
+
+// ═══════════════════════════════════════════════════
+//  PWA INSTALL
+// ═══════════════════════════════════════════════════
+var deferredInstall=null;
+
+window.addEventListener('beforeinstallprompt',function(e){
+  e.preventDefault();
+  deferredInstall=e;
+  if(!localStorage.getItem('stp_install_dismissed')){
+    setTimeout(function(){ $('install-banner').classList.add('show'); }, 3000);
+  }
+});
+
+window.addEventListener('appinstalled',function(){
+  $('install-banner').classList.remove('show');
+  deferredInstall=null;
+  toast('App installed! ✓');
+});
+
+function installApp(){
+  if(deferredInstall){
+    deferredInstall.prompt();
+    deferredInstall.userChoice.then(function(r){
+      if(r.outcome==='accepted') $('install-banner').classList.remove('show');
+      deferredInstall=null;
+    });
+  } else {
+    // iOS instructions
+    toast('On iPhone: tap Share → Add to Home Screen','warn');
+  }
+}
+
+function dismissInstall(){
+  $('install-banner').classList.remove('show');
+  localStorage.setItem('stp_install_dismissed','1');
+}
+
+// Register service worker for offline support
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').catch(function(){});
 }
 
 // ═══════════════════════════════════════════════════

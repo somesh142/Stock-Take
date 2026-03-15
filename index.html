@@ -854,10 +854,22 @@ function saveInventory(){
   var parsed=rawR.map(function(r){return{code:String(r[ci]||'').trim(),name:String(r[ni]||'').trim(),category:cai!==null?String(r[cai]||'').trim():'',expected:qi!==null?parseFloat(r[qi])||0:0,bc1:b1!==null?String(r[b1]||'').trim():'',bc2:b2!==null?String(r[b2]||'').trim():'',bc3:b3!==null?String(r[b3]||'').trim():'',bc4:b4!==null?String(r[b4]||'').trim():'',tax:ti!==null?String(r[ti]||'').trim():''};}).filter(function(p){return p.code&&p.name;});
   if(!parsed.length){toast('No valid rows','err');return;}
   saving(true);
-  // Clear then insert
+  // Clear then insert in chunks of 200
   sbDelete('inventory','code=neq.null')
-    .then(function(){return sbUpsert('inventory',parsed);})
-    .then(function(){inventory=parsed.sort(function(a,b){return a.name.localeCompare(b.name);});$('col-map').style.display='none';showInvInfo();toast('✔ '+parsed.length+' products saved');if(curRole==='admin')refreshDash();})
+    .then(function(){
+      var chunks=[], size=200;
+      for(var i=0;i<parsed.length;i+=size) chunks.push(parsed.slice(i,i+size));
+      return chunks.reduce(function(p,chunk){
+        return p.then(function(){ return sbUpsert('inventory',chunk); });
+      }, Promise.resolve());
+    })
+    .then(function(){
+      inventory=parsed.sort(function(a,b){return a.name.localeCompare(b.name);});
+      $('col-map').style.display='none';
+      showInvInfo();
+      toast('✔ '+parsed.length+' products saved');
+      if(curRole==='admin')refreshDash();
+    })
     .catch(function(e){toast('Error: '+e.message,'err');})
     .finally(function(){saving(false);});
 }

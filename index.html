@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>StockTake Pro</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -231,21 +231,31 @@ tbody tr:last-child td{border-bottom:none;}
 /* ── CAMERA SCANNER ── */
 .cam-btn{width:44px;height:44px;background:var(--gold);border:none;border-radius:3px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;transition:all 0.15s;}
 .cam-btn:hover{background:#f5cc55;box-shadow:0 4px 16px rgba(240,192,64,0.4);}
-.cam-btn.active{background:var(--red);animation:pulse-red 1s ease-in-out infinite;}
-@keyframes pulse-red{0%,100%{box-shadow:0 0 0 0 rgba(240,64,96,0.4)}50%{box-shadow:0 0 0 8px rgba(240,64,96,0)}}
-#cam-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:150;flex-direction:column;align-items:center;justify-content:center;gap:1rem;}
+.cam-btn.active{background:var(--red);}
+#cam-overlay{display:none;position:fixed;inset:0;background:#000;z-index:150;flex-direction:column;}
 #cam-overlay.open{display:flex;}
-#cam-container{position:relative;width:min(360px,90vw);}
-#cam-video{width:100%;border-radius:8px;display:block;background:#000;}
-.cam-frame{position:absolute;inset:0;border-radius:8px;pointer-events:none;}
-.cam-frame::before,.cam-frame::after{content:'';position:absolute;width:40px;height:40px;border-color:var(--gold);border-style:solid;}
-.cam-frame::before{top:12px;left:12px;border-width:3px 0 0 3px;border-radius:4px 0 0 4px;}
-.cam-frame::after{bottom:12px;right:12px;border-width:0 3px 3px 0;border-radius:0 0 4px 0;}
-.scan-line{position:absolute;left:12px;right:12px;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent);animation:scanline 2s ease-in-out infinite;}
-@keyframes scanline{0%{top:15%}100%{top:85%}}
-.cam-hint{font-family:'IBM Plex Mono',monospace;font-size:0.72rem;color:var(--muted);text-align:center;}
-.cam-hint strong{color:var(--gold);}
-#cam-result{font-family:'IBM Plex Mono',monospace;font-size:0.8rem;color:var(--green);text-align:center;min-height:1.2rem;}
+#cam-topbar{height:54px;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:space-between;padding:0 1rem;flex-shrink:0;}
+#cam-topbar-title{font-family:'Bebas Neue',sans-serif;font-size:1.3rem;letter-spacing:0.06em;color:var(--gold);}
+#cam-close-btn{background:transparent;border:1px solid rgba(255,255,255,0.2);color:#fff;font-family:'IBM Plex Mono',monospace;font-size:0.7rem;padding:0.3rem 0.75rem;cursor:pointer;border-radius:2px;letter-spacing:0.06em;}
+#cam-reader{flex:1;position:relative;overflow:hidden;}
+#cam-reader video{width:100%!important;height:100%!important;object-fit:cover;}
+#cam-reader img{display:none!important;}
+/* Override html5-qrcode default styles */
+#cam-reader__scan_region{width:100%!important;height:100%!important;}
+#cam-reader__scan_region > img{display:none!important;}
+#cam-reader__dashboard{display:none!important;}
+.cam-aim{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:10;}
+.cam-aim-box{width:260px;height:160px;position:relative;}
+.cam-aim-box::before,.cam-aim-box::after,.cam-corner-bl,.cam-corner-tr{content:'';position:absolute;width:32px;height:32px;border-color:var(--gold);border-style:solid;}
+.cam-aim-box::before{top:0;left:0;border-width:3px 0 0 3px;}
+.cam-aim-box::after{top:0;right:0;border-width:3px 3px 0 0;}
+.cam-corner-bl{bottom:0;left:0;border-width:0 0 3px 3px;}
+.cam-corner-tr{bottom:0;right:0;border-width:0 3px 3px 0;}
+.cam-scanline{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent);animation:scanline 1.5s ease-in-out infinite;}
+@keyframes scanline{0%,100%{top:5%}50%{top:90%}}
+#cam-status{height:64px;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;flex-shrink:0;}
+#cam-status-txt{font-family:'IBM Plex Mono',monospace;font-size:0.72rem;color:var(--muted);}
+#cam-status-code{font-family:'Bebas Neue',sans-serif;font-size:1.1rem;color:var(--green);letter-spacing:0.05em;min-height:1.4rem;}
 
 /* ── TOAST ── */
 #toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--sur2);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:0.76rem;padding:0.85rem 1.25rem;border-left:3px solid var(--green);border-radius:4px;z-index:200;transform:translateX(120%);transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1);max-width:320px;box-shadow:0 8px 40px var(--shadow);}
@@ -625,13 +635,23 @@ create policy "public" on config for all using (true) with check (true);</code>
 
 <!-- CAMERA SCANNER OVERLAY -->
 <div id="cam-overlay">
-  <div id="cam-container">
-    <video id="cam-video" playsinline autoplay muted></video>
-    <div class="cam-frame"><div class="scan-line"></div></div>
+  <div id="cam-topbar">
+    <div id="cam-topbar-title">📷 Scan Barcode</div>
+    <button id="cam-close-btn" onclick="stopCamera()">✕ Close</button>
   </div>
-  <div id="cam-result"></div>
-  <div class="cam-hint">Point camera at barcode · <strong>Auto-detects</strong></div>
-  <button class="btn btn-ghost btn-sm" onclick="stopCamera()" style="margin-top:0.5rem;">✕ Close Camera</button>
+  <div id="cam-reader">
+    <div class="cam-aim">
+      <div class="cam-aim-box">
+        <div class="cam-scanline"></div>
+        <div class="cam-corner-bl"></div>
+        <div class="cam-corner-tr"></div>
+      </div>
+    </div>
+  </div>
+  <div id="cam-status">
+    <div id="cam-status-txt">Point camera at any barcode</div>
+    <div id="cam-status-code"></div>
+  </div>
 </div>
 
 <!-- MODALS -->
@@ -1056,9 +1076,9 @@ function exportXL(){if(!scanLog.length){toast('No data to export','err');return;
 function clearAllScans(){saving(true);sbDelete('scans','code=neq.null').then(function(){scanLog=[];$('clear-modal').classList.remove('open');refreshDash();toast('All records deleted','warn');}).catch(function(e){toast('Error: '+e.message,'err');}).finally(function(){saving(false);});}
 
 // ═══════════════════════════════════════════════════
-//  CAMERA BARCODE SCANNER
+//  CAMERA BARCODE SCANNER (html5-qrcode — fast & reliable)
 // ═══════════════════════════════════════════════════
-var camStream=null, codeReader=null, camActive=false;
+var html5Qr=null, camActive=false, lastCode='', lastCodeTime=0;
 
 function toggleCamera(){
   if(camActive) stopCamera();
@@ -1066,32 +1086,64 @@ function toggleCamera(){
 }
 
 function startCamera(){
-  if(typeof ZXing==='undefined'){toast('Scanner library not loaded','err');return;}
-  var overlay=$('cam-overlay');
-  overlay.classList.add('open');
-  camActive=true;
+  if(typeof Html5Qrcode==='undefined'){toast('Scanner not loaded yet, try again','err');return;}
+  $('cam-overlay').classList.add('open');
   $('cam-btn').classList.add('active');
   $('cam-btn').textContent='🔴';
-  $('cam-result').textContent='';
+  $('cam-status-txt').textContent='Starting camera…';
+  $('cam-status-code').textContent='';
+  camActive=true;
+  lastCode=''; lastCodeTime=0;
 
-  codeReader=new ZXing.BrowserMultiFormatReader();
-  codeReader.listVideoInputDevices().then(function(devices){
-    // Prefer back camera on mobile
-    var device=devices.find(function(d){return d.label.toLowerCase().includes('back')||d.label.toLowerCase().includes('rear')||d.label.toLowerCase().includes('environment');});
-    var deviceId=device?device.deviceId:undefined;
-    return codeReader.decodeFromVideoDevice(deviceId,'cam-video',function(result,err){
-      if(result){
-        var code=result.getText();
-        $('cam-result').textContent='✔ '+code;
-        // Vibrate on mobile
-        if(navigator.vibrate) navigator.vibrate(100);
-        stopCamera();
-        $('scan-in').value=code;
-        pickProd(code);
-      }
-    });
+  html5Qr=new Html5Qrcode('cam-reader');
+
+  var config={
+    fps:30,                          // High frame rate = faster detection
+    qrbox:false,                     // No box restriction = scan anywhere
+    aspectRatio:1.7778,              // 16:9
+    disableFlip:false,
+    experimentalFeatures:{useBarCodeDetectorIfSupported:true}, // Use native API if available (Chrome Android = very fast)
+    formatsToSupport:[               // All common barcode formats
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.UPC_A,
+      Html5QrcodeSupportedFormats.UPC_E,
+      Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.CODE_39,
+      Html5QrcodeSupportedFormats.ITF,
+      Html5QrcodeSupportedFormats.QR_CODE,
+    ]
+  };
+
+  // Try back camera first
+  Html5Qrcode.getCameras().then(function(cameras){
+    if(!cameras||!cameras.length){toast('No camera found','err');stopCamera();return;}
+    // Prefer back/environment camera
+    var cam=cameras.find(function(c){return c.label.toLowerCase().includes('back')||c.label.toLowerCase().includes('rear')||c.label.toLowerCase().includes('environment');});
+    var camId=cam?cam.id:cameras[cameras.length-1].id;
+    $('cam-status-txt').textContent='Camera ready — point at barcode';
+
+    return html5Qr.start(
+      camId,
+      config,
+      function(code){
+        // Debounce — ignore same code within 2s
+        var now=Date.now();
+        if(code===lastCode&&(now-lastCodeTime)<2000) return;
+        lastCode=code; lastCodeTime=now;
+        $('cam-status-code').textContent='✔ '+code;
+        $('cam-status-txt').textContent='Found!';
+        if(navigator.vibrate) navigator.vibrate([80,30,80]);
+        setTimeout(function(){
+          stopCamera();
+          $('scan-in').value=code;
+          pickProd(code);
+        },300);
+      },
+      function(){} // ignore decode errors (called constantly while scanning)
+    );
   }).catch(function(e){
-    toast('Camera error: '+e.message,'err');
+    toast('Camera error: '+(e.message||e),'err');
     stopCamera();
   });
 }
@@ -1101,9 +1153,9 @@ function stopCamera(){
   $('cam-btn').classList.remove('active');
   $('cam-btn').textContent='📷';
   $('cam-overlay').classList.remove('open');
-  if(codeReader){
-    try{codeReader.reset();}catch(e){}
-    codeReader=null;
+  if(html5Qr){
+    html5Qr.stop().catch(function(){});
+    html5Qr=null;
   }
 }
 

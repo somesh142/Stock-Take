@@ -664,10 +664,14 @@ function sbGet(table,params){
 }
 
 function sbUpsert(table,data){
-  return fetch(SB_URL+'/rest/v1/'+table,{
+  // Use on-conflict-ignore for inventory (skip dupes), merge for scans
+  var prefer = table==='inventory'
+    ? 'resolution=ignore-duplicates,return=minimal'
+    : 'resolution=merge-duplicates,return=minimal';
+  return fetch(SB_URL+'/rest/v1/'+table+'?on_conflict=code',{
     method:'POST',
-    headers:Object.assign({},sbHeaders(),{'Prefer':'resolution=merge-duplicates,return=minimal'}),
-    body:JSON.stringify(data)
+    headers:Object.assign({},sbHeaders(),{'Prefer':prefer}),
+    body:JSON.stringify(Array.isArray(data)?data:[data])
   }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t);});return r;});
 }
 

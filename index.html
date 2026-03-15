@@ -648,7 +648,7 @@ create policy "public" on config for all using (true) with check (true);</code>
       <div class="scan-panel">
         <div class="scan-panel-body">
 
-          <!-- Barcode + Camera -->
+          <!-- Barcode + Camera + Search -->
           <div>
             <div class="sp-lbl">Scan Barcode</div>
             <div style="display:flex;gap:0.5rem;align-items:stretch;">
@@ -656,9 +656,9 @@ create policy "public" on config for all using (true) with check (true);</code>
                 <span class="scan-ico">⬛</span>
                 <input class="inp" type="text" id="scan-in" placeholder="Scan or type barcode…" autocomplete="off" style="padding-left:2.6rem;font-size:0.95rem;font-weight:600;border-width:2px;"/>
               </div>
-              <button class="cam-btn" id="cam-btn" onclick="openNativeScanner()" title="Scan with camera">📷</button>
+              <button class="cam-btn" onclick="doBarcode()" title="Search" style="background:var(--green);font-size:1rem;font-family:'IBM Plex Mono',monospace;font-weight:700;letter-spacing:0;color:#04150d;">Go</button>
+              <button class="cam-btn" id="cam-btn" onclick="toggleCamera()" title="Scan with camera">📷</button>
             </div>
-            <input type="file" id="native-cam" accept="image/*" capture="environment" style="display:none;" onchange="processNativeCapture(this)"/>
           </div>
 
           <!-- Name Search -->
@@ -749,7 +749,32 @@ create policy "public" on config for all using (true) with check (true);</code>
   </div>
 </div>
 
-<!-- Native camera - no overlay needed -->
+<!-- LIVE CAMERA SCANNER OVERLAY -->
+<div id="cam-overlay" style="display:none;position:fixed;inset:0;background:#000;z-index:500;flex-direction:column;">
+  <div style="height:54px;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:space-between;padding:0 1rem;flex-shrink:0;">
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:1.3rem;letter-spacing:0.06em;color:var(--gold);">📷 Scan Barcode</div>
+    <button onclick="stopCamera()" style="background:transparent;border:1px solid rgba(255,255,255,0.25);color:#fff;font-family:'IBM Plex Mono',monospace;font-size:0.72rem;padding:0.35rem 0.85rem;cursor:pointer;border-radius:3px;">✕ Close</button>
+  </div>
+  <div style="flex:1;position:relative;overflow:hidden;">
+    <video id="cam-video" style="width:100%;height:100%;object-fit:cover;" playsinline muted></video>
+    <!-- Aim guide -->
+    <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;">
+      <div style="width:80%;max-width:320px;height:120px;position:relative;">
+        <div style="position:absolute;top:0;left:0;width:32px;height:32px;border-top:3px solid var(--gold);border-left:3px solid var(--gold);"></div>
+        <div style="position:absolute;top:0;right:0;width:32px;height:32px;border-top:3px solid var(--gold);border-right:3px solid var(--gold);"></div>
+        <div style="position:absolute;bottom:0;left:0;width:32px;height:32px;border-bottom:3px solid var(--gold);border-left:3px solid var(--gold);"></div>
+        <div style="position:absolute;bottom:0;right:0;width:32px;height:32px;border-bottom:3px solid var(--gold);border-right:3px solid var(--gold);"></div>
+        <div id="scan-laser" style="position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent);top:50%;animation:laser 1.5s ease-in-out infinite;"></div>
+      </div>
+    </div>
+  </div>
+  <div style="height:70px;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+    <div id="cam-status" style="font-family:'IBM Plex Mono',monospace;font-size:0.75rem;color:var(--muted);text-align:center;">Hold barcode inside the frame</div>
+  </div>
+</div>
+<style>
+@keyframes laser{0%,100%{top:15%}50%{top:80%}}
+</style>
 
 <!-- MODALS -->
 <div class="overlay" id="dup-modal">
@@ -1071,7 +1096,7 @@ function clearInv(){
 // ═══════════════════════════════════════════════════
 //  SCAN
 // ═══════════════════════════════════════════════════
-function doBarcode(){var v=$('scan-in').value.trim();if(v)pickProd(v);}
+function doBarcode(){var v=$('scan-in').value.trim();if(v){pickProd(v);$('scan-in').select();}}
 
 function pickProd(code){
   var q=code.toLowerCase();
@@ -1194,82 +1219,140 @@ function exportXL(){if(!scanLog.length){toast('No data to export','err');return;
 function clearAllScans(){saving(true);sbDelete('scans','code=neq.null').then(function(){scanLog=[];$('clear-modal').classList.remove('open');refreshDash();toast('All records deleted','warn');}).catch(function(e){toast('Error: '+e.message,'err');}).finally(function(){saving(false);});}
 
 // ═══════════════════════════════════════════════════
-//  NATIVE CAMERA BARCODE SCANNER
-//  Uses the phone's built-in camera — instant & reliable
-//  Works like Google Sheets / inventory apps
+//  HIGH PERFORMANCE BARCODE SCANNER
+//  Uses zbar-wasm (WebAssembly) — fastest free JS scanner
+//  + Native BarcodeDetector on supported browsers
 // ═══════════════════════════════════════════════════
+var camActive=false, lastScan='', lastScanTime=0, scanRAF=null;
+var detector=null;
 
-function openNativeScanner(){
-  // On mobile: opens native camera. On desktop: opens file picker.
-  $('native-cam').value='';
-  $('native-cam').click();
+// Pre-initialise detector as soon as page loads
+async function initDetector(){
+  try{
+    // Use native BarcodeDetector if available (Chrome Android — fastest)
+    if('BarcodeDetector' in window){
+      detector=new BarcodeDetector({
+        formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','code_93','itf','qr_code','data_matrix','codabar']
+      });
+      console.log('Using native BarcodeDetector');
+      return;
+    }
+    // Use zbar-wasm polyfill (works on all browsers including Safari/iOS)
+    if(typeof BarcodeDetectorPolyfill!=='undefined'){
+      await BarcodeDetectorPolyfill.BarcodeDetectorPolyfill.loadWorker(
+        'https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.9.15/dist/zbar.wasm'
+      );
+      detector=new BarcodeDetectorPolyfill.BarcodeDetectorPolyfill({
+        formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','code_93','qr_code','itf']
+      });
+      console.log('Using zbar-wasm polyfill');
+    }
+  }catch(e){ console.log('Detector init error:',e); }
+}
+initDetector();
+
+function toggleCamera(){
+  if(camActive) stopCamera();
+  else startCamera();
 }
 
-function processNativeCapture(input){
-  if(!input.files||!input.files[0]) return;
-  var file=input.files[0];
-  $('cam-btn').textContent='⏳';
+function startCamera(){
+  $('cam-overlay').style.display='flex';
+  camActive=true;
+  $('cam-btn').textContent='🔴';
+  $('cam-status').textContent='Starting camera…';
+  $('cam-status').style.color='var(--muted)';
 
-  // Use BarcodeDetector API if available (Chrome Android — very fast, native)
-  if('BarcodeDetector' in window){
-    var detector=new BarcodeDetector({
-      formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','code_93','itf','qr_code','data_matrix']
+  // Request highest resolution back camera for best barcode detection
+  var constraints={
+    video:{
+      facingMode:{ideal:'environment'},
+      width:{min:640,ideal:1920,max:4096},
+      height:{min:480,ideal:1080,max:2160},
+      focusMode:'continuous',
+      advanced:[{focusMode:'continuous'},{zoom:1}]
+    }
+  };
+
+  navigator.mediaDevices.getUserMedia(constraints)
+    .catch(function(){
+      // Fallback to basic constraints if advanced fails
+      return navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}});
+    })
+    .then(function(stream){
+      window._camStream=stream;
+      var v=$('cam-video');
+      v.srcObject=stream;
+      v.play();
+      v.onloadedmetadata=function(){
+        $('cam-status').textContent='Point at barcode';
+        if(detector) startScanLoop(v);
+        else $('cam-status').textContent='Camera ready — scanner loading…';
+      };
+    })
+    .catch(function(e){
+      toast('Camera permission denied','err');
+      stopCamera();
     });
-    createImageBitmap(file).then(function(img){
-      return detector.detect(img);
-    }).then(function(barcodes){
-      $('cam-btn').textContent='📷';
-      if(barcodes&&barcodes.length>0){
-        var code=barcodes[0].rawValue;
-        if(navigator.vibrate) navigator.vibrate(80);
-        $('scan-in').value=code;
-        pickProd(code);
-      } else {
-        toast('No barcode found in image — try again','warn');
+}
+
+function startScanLoop(video){
+  var canvas=document.createElement('canvas');
+  var ctx=canvas.getContext('2d',{willReadFrequently:true});
+  var W,H;
+
+  function loop(){
+    if(!camActive) return;
+    if(video.readyState<2){ scanRAF=requestAnimationFrame(loop); return; }
+
+    W=video.videoWidth; H=video.videoHeight;
+    if(!W||!H){ scanRAF=requestAnimationFrame(loop); return; }
+
+    // Crop center strip for barcode — faster detection
+    var cropH=Math.round(H*0.5);
+    var cropY=Math.round(H*0.25);
+    canvas.width=W; canvas.height=cropH;
+    ctx.drawImage(video,0,cropY,W,cropH,0,0,W,cropH);
+
+    detector.detect(canvas).then(function(results){
+      if(!camActive) return;
+      if(results&&results.length>0){
+        var code=results[0].rawValue||results[0].barcodeText;
+        var now=Date.now();
+        if(code&&(code!==lastScan||(now-lastScanTime)>2000)){
+          lastScan=code; lastScanTime=now;
+          onFound(code);
+          return;
+        }
       }
+      scanRAF=requestAnimationFrame(loop);
     }).catch(function(){
-      $('cam-btn').textContent='📷';
-      toast('Could not read image','err');
+      scanRAF=requestAnimationFrame(loop);
     });
-    return;
   }
 
-  // Fallback: use ZXing via canvas for browsers without BarcodeDetector
-  var img=new Image();
-  img.onload=function(){
-    var canvas=document.createElement('canvas');
-    canvas.width=img.width; canvas.height=img.height;
-    var ctx=canvas.getContext('2d');
-    ctx.drawImage(img,0,0);
-    var imageData=ctx.getImageData(0,0,canvas.width,canvas.height);
+  scanRAF=requestAnimationFrame(loop);
+}
 
-    // Try to decode using BarcodeDetector polyfill approach
-    if(typeof ZXing!=='undefined'){
-      var hints=new Map();
-      var reader=new ZXing.MultiFormatReader();
-      try{
-        var binaryBitmap=new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(
-          new ZXing.RGBLuminanceSource(imageData.data,canvas.width,canvas.height)
-        ));
-        var result=reader.decode(binaryBitmap);
-        $('cam-btn').textContent='📷';
-        if(result){
-          var code=result.getText();
-          if(navigator.vibrate) navigator.vibrate(80);
-          $('scan-in').value=code;
-          pickProd(code);
-        }
-      } catch(e){
-        $('cam-btn').textContent='📷';
-        toast('No barcode detected — try again','warn');
-      }
-    } else {
-      $('cam-btn').textContent='📷';
-      toast('Barcode detection not supported on this browser','err');
-    }
-    URL.revokeObjectURL(img.src);
-  };
-  img.src=URL.createObjectURL(file);
+function onFound(code){
+  $('cam-status').textContent='✔  '+code;
+  $('cam-status').style.color='var(--green)';
+  if(navigator.vibrate) navigator.vibrate([40,20,40]);
+  setTimeout(function(){
+    stopCamera();
+    $('scan-in').value=code;
+    pickProd(code);
+  },300);
+}
+
+function stopCamera(){
+  camActive=false;
+  if(scanRAF){ cancelAnimationFrame(scanRAF); scanRAF=null; }
+  $('cam-btn').textContent='📷';
+  $('cam-overlay').style.display='none';
+  if(window._camStream){ window._camStream.getTracks().forEach(function(t){t.stop();}); window._camStream=null; }
+  var v=$('cam-video');
+  if(v.srcObject){ v.srcObject.getTracks().forEach(function(t){t.stop();}); v.srcObject=null; }
 }
 
 // ═══════════════════════════════════════════════════

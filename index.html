@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>StockTake Pro</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -226,6 +227,25 @@ tbody tr:last-child td{border-bottom:none;}
 .dup-info{background:var(--bg2);border:1px solid var(--bor2);padding:0.9rem 1rem;margin-bottom:1rem;font-family:'IBM Plex Mono',monospace;font-size:0.76rem;line-height:1.9;border-radius:4px;}
 .modal-btns{display:flex;gap:0.75rem;flex-wrap:wrap;}
 .modal-btns .btn{flex:1;}
+
+/* ── CAMERA SCANNER ── */
+.cam-btn{width:44px;height:44px;background:var(--gold);border:none;border-radius:3px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;transition:all 0.15s;}
+.cam-btn:hover{background:#f5cc55;box-shadow:0 4px 16px rgba(240,192,64,0.4);}
+.cam-btn.active{background:var(--red);animation:pulse-red 1s ease-in-out infinite;}
+@keyframes pulse-red{0%,100%{box-shadow:0 0 0 0 rgba(240,64,96,0.4)}50%{box-shadow:0 0 0 8px rgba(240,64,96,0)}}
+#cam-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:150;flex-direction:column;align-items:center;justify-content:center;gap:1rem;}
+#cam-overlay.open{display:flex;}
+#cam-container{position:relative;width:min(360px,90vw);}
+#cam-video{width:100%;border-radius:8px;display:block;background:#000;}
+.cam-frame{position:absolute;inset:0;border-radius:8px;pointer-events:none;}
+.cam-frame::before,.cam-frame::after{content:'';position:absolute;width:40px;height:40px;border-color:var(--gold);border-style:solid;}
+.cam-frame::before{top:12px;left:12px;border-width:3px 0 0 3px;border-radius:4px 0 0 4px;}
+.cam-frame::after{bottom:12px;right:12px;border-width:0 3px 3px 0;border-radius:0 0 4px 0;}
+.scan-line{position:absolute;left:12px;right:12px;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent);animation:scanline 2s ease-in-out infinite;}
+@keyframes scanline{0%{top:15%}100%{top:85%}}
+.cam-hint{font-family:'IBM Plex Mono',monospace;font-size:0.72rem;color:var(--muted);text-align:center;}
+.cam-hint strong{color:var(--gold);}
+#cam-result{font-family:'IBM Plex Mono',monospace;font-size:0.8rem;color:var(--green);text-align:center;min-height:1.2rem;}
 
 /* ── TOAST ── */
 #toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--sur2);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:0.76rem;padding:0.85rem 1.25rem;border-left:3px solid var(--green);border-radius:4px;z-index:200;transform:translateX(120%);transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1);max-width:320px;box-shadow:0 8px 40px var(--shadow);}
@@ -549,9 +569,12 @@ create policy "public" on config for all using (true) with check (true);</code>
     <div class="scan-panel">
       <div>
         <div class="sp-lbl">Scan Barcode</div>
-        <div class="scan-wrap">
-          <span class="scan-ico">⬛</span>
-          <input class="inp" type="text" id="scan-in" placeholder="Scan or type code…" autocomplete="off" style="padding-left:2.6rem;font-size:0.95rem;font-weight:600;border-width:2px;"/>
+        <div style="display:flex;gap:0.5rem;align-items:stretch;">
+          <div class="scan-wrap" style="flex:1;">
+            <span class="scan-ico">⬛</span>
+            <input class="inp" type="text" id="scan-in" placeholder="Scan or type code…" autocomplete="off" style="padding-left:2.6rem;font-size:0.95rem;font-weight:600;border-width:2px;"/>
+          </div>
+          <button class="cam-btn" id="cam-btn" onclick="toggleCamera()" title="Scan with camera">📷</button>
         </div>
       </div>
       <div>
@@ -598,6 +621,17 @@ create policy "public" on config for all using (true) with check (true);</code>
       </div>
     </div>
   </div>
+</div>
+
+<!-- CAMERA SCANNER OVERLAY -->
+<div id="cam-overlay">
+  <div id="cam-container">
+    <video id="cam-video" playsinline autoplay muted></video>
+    <div class="cam-frame"><div class="scan-line"></div></div>
+  </div>
+  <div id="cam-result"></div>
+  <div class="cam-hint">Point camera at barcode · <strong>Auto-detects</strong></div>
+  <button class="btn btn-ghost btn-sm" onclick="stopCamera()" style="margin-top:0.5rem;">✕ Close Camera</button>
 </div>
 
 <!-- MODALS -->
@@ -660,7 +694,8 @@ function sbHeaders(){
 
 function sbGet(table,params){
   var url=SB_URL+'/rest/v1/'+table+'?'+(params||'select=*');
-  return fetch(url,{headers:sbHeaders()}).then(function(r){if(!r.ok)throw new Error(r.status+' '+r.statusText);return r.json();});
+  var h=Object.assign({},sbHeaders(),{'Range-Unit':'items'});
+  return fetch(url,{headers:h}).then(function(r){if(!r.ok)throw new Error(r.status+' '+r.statusText);return r.json();});
 }
 
 function sbUpsert(table,data){
@@ -764,14 +799,22 @@ function loadScans(){
 }
 
 function loadInventory(){
-  return sbGet('inventory','select=*&order=name.asc').then(function(rows){
-    inventory=rows.map(function(r){return{
-      code:String(r.code||''),name:String(r.name||''),category:String(r.category||''),
-      expected:Number(r.expected)||0,bc1:String(r.bc1||''),bc2:String(r.bc2||''),
-      bc3:String(r.bc3||''),bc4:String(r.bc4||''),tax:String(r.tax||'')
-    };});
-    showInvInfo();
-  }).catch(function(){});
+  // Fetch all rows by paginating (Supabase default limit = 1000)
+  var all=[], offset=0, limit=1000;
+  function fetchPage(){
+    return sbGet('inventory','select=*&order=name.asc&limit='+limit+'&offset='+offset)
+      .then(function(rows){
+        all=all.concat(rows);
+        if(rows.length===limit){ offset+=limit; return fetchPage(); }
+        inventory=all.map(function(r){return{
+          code:String(r.code||''),name:String(r.name||''),category:String(r.category||''),
+          expected:Number(r.expected)||0,bc1:String(r.bc1||''),bc2:String(r.bc2||''),
+          bc3:String(r.bc3||''),bc4:String(r.bc4||''),tax:String(r.tax||'')
+        };});
+        showInvInfo();
+      });
+  }
+  return fetchPage().catch(function(){});
 }
 
 // ═══════════════════════════════════════════════════
@@ -1011,6 +1054,58 @@ function exportXL(){if(!scanLog.length){toast('No data to export','err');return;
 //  CLEAR
 // ═══════════════════════════════════════════════════
 function clearAllScans(){saving(true);sbDelete('scans','code=neq.null').then(function(){scanLog=[];$('clear-modal').classList.remove('open');refreshDash();toast('All records deleted','warn');}).catch(function(e){toast('Error: '+e.message,'err');}).finally(function(){saving(false);});}
+
+// ═══════════════════════════════════════════════════
+//  CAMERA BARCODE SCANNER
+// ═══════════════════════════════════════════════════
+var camStream=null, codeReader=null, camActive=false;
+
+function toggleCamera(){
+  if(camActive) stopCamera();
+  else startCamera();
+}
+
+function startCamera(){
+  if(typeof ZXing==='undefined'){toast('Scanner library not loaded','err');return;}
+  var overlay=$('cam-overlay');
+  overlay.classList.add('open');
+  camActive=true;
+  $('cam-btn').classList.add('active');
+  $('cam-btn').textContent='🔴';
+  $('cam-result').textContent='';
+
+  codeReader=new ZXing.BrowserMultiFormatReader();
+  codeReader.listVideoInputDevices().then(function(devices){
+    // Prefer back camera on mobile
+    var device=devices.find(function(d){return d.label.toLowerCase().includes('back')||d.label.toLowerCase().includes('rear')||d.label.toLowerCase().includes('environment');});
+    var deviceId=device?device.deviceId:undefined;
+    return codeReader.decodeFromVideoDevice(deviceId,'cam-video',function(result,err){
+      if(result){
+        var code=result.getText();
+        $('cam-result').textContent='✔ '+code;
+        // Vibrate on mobile
+        if(navigator.vibrate) navigator.vibrate(100);
+        stopCamera();
+        $('scan-in').value=code;
+        pickProd(code);
+      }
+    });
+  }).catch(function(e){
+    toast('Camera error: '+e.message,'err');
+    stopCamera();
+  });
+}
+
+function stopCamera(){
+  camActive=false;
+  $('cam-btn').classList.remove('active');
+  $('cam-btn').textContent='📷';
+  $('cam-overlay').classList.remove('open');
+  if(codeReader){
+    try{codeReader.reset();}catch(e){}
+    codeReader=null;
+  }
+}
 
 // ═══════════════════════════════════════════════════
 //  BOOT

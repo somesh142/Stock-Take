@@ -11,7 +11,6 @@
 <link rel="manifest" href="manifest.json">
 <title>StockTake Pro</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -189,11 +188,78 @@ tbody tr:last-child td{border-bottom:none;}
 .exp-sec-title.red{color:var(--red);}.exp-sec-title.amb{color:var(--gold);}
 
 /* ── USER SCREEN ── */
-.user-wrap{display:grid;grid-template-columns:360px 1fr;min-height:calc(100vh - 54px);}
-@media(max-width:800px){.user-wrap{grid-template-columns:1fr;}}
-.scan-panel{background:var(--bg3);border-right:1px solid var(--border);padding:1.25rem;display:flex;flex-direction:column;gap:1rem;overflow-y:auto;}
-.sp-lbl{font-family:'IBM Plex Mono',monospace;font-size:0.6rem;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted);margin-bottom:0.4rem;display:flex;align-items:center;gap:0.5rem;}
+/* ── USER SCREEN — MOBILE FIRST ── */
+.user-wrap{display:flex;flex-direction:column;height:calc(100vh - 54px);overflow:hidden;}
+
+/* DESKTOP: side by side */
+@media(min-width:800px){
+  .user-wrap{display:grid;grid-template-columns:380px 1fr;height:calc(100vh - 54px);}
+}
+
+/* SCAN PANEL — compact, no scroll on mobile */
+.scan-panel{
+  background:var(--bg3);
+  border-right:1px solid var(--border);
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  /* Mobile: takes full height minus bottom nav */
+  height:100%;
+}
+.scan-panel-body{
+  flex:1;
+  overflow-y:auto;
+  padding:0.85rem;
+  display:flex;
+  flex-direction:column;
+  gap:0.65rem;
+}
+.sp-lbl{font-family:'IBM Plex Mono',monospace;font-size:0.58rem;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted);margin-bottom:0.3rem;display:flex;align-items:center;gap:0.5rem;}
 .sp-lbl::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* RECORD BUTTON — always sticky at bottom */
+.scan-panel-footer{
+  padding:0.75rem 0.85rem;
+  background:var(--bg3);
+  border-top:1px solid var(--border);
+  flex-shrink:0;
+}
+
+/* Mobile tab switcher */
+.mobile-tabs{
+  display:flex;
+  background:var(--bg2);
+  border-bottom:1px solid var(--border);
+  flex-shrink:0;
+}
+@media(min-width:800px){.mobile-tabs{display:none;}}
+.mob-tab{
+  flex:1;
+  padding:0.6rem 0.5rem;
+  font-family:'IBM Plex Mono',monospace;
+  font-size:0.62rem;
+  text-transform:uppercase;
+  letter-spacing:0.06em;
+  color:var(--muted);
+  background:transparent;
+  border:none;
+  cursor:pointer;
+  border-bottom:2px solid transparent;
+  transition:all 0.15s;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+}
+.mob-tab.on{color:var(--gold);border-bottom-color:var(--gold);background:rgba(240,192,64,0.05);}
+
+/* Mobile panel visibility */
+.mob-panel{display:none;}
+.mob-panel.on{display:flex;flex-direction:column;flex:1;overflow:hidden;}
+@media(min-width:800px){
+  .mob-panel{display:flex!important;flex-direction:column;flex:1;overflow:hidden;}
+  .log-panel{display:flex;}
+}
 .scan-wrap{position:relative;}
 .scan-ico{position:absolute;left:0.85rem;top:50%;transform:translateY(-50%);font-size:0.9rem;pointer-events:none;}
 .prod-card{border:2px solid var(--bor2);background:var(--bg2);padding:1rem;min-height:88px;border-radius:4px;display:flex;flex-direction:column;justify-content:center;transition:all 0.2s;position:relative;}
@@ -212,13 +278,14 @@ tbody tr:last-child td{border-bottom:none;}
 .isearch-item:hover{background:rgba(240,192,64,0.05);}
 .isearch-item:last-child{border-bottom:none;}
 .is-code{font-family:'IBM Plex Mono',monospace;font-size:0.65rem;color:var(--muted);}
-.log-panel{display:flex;flex-direction:column;background:var(--bg);}
-.u-stats{background:var(--bg2);border-bottom:1px solid var(--border);display:grid;grid-template-columns:repeat(3,1fr);padding:1rem 1.5rem;}
-.us-block{padding:0 1rem;border-right:1px solid var(--border);}
+.log-panel{display:none;flex-direction:column;background:var(--bg);overflow:hidden;}
+@media(min-width:800px){.log-panel{display:flex;}}
+.u-stats{background:var(--bg2);border-bottom:1px solid var(--border);display:grid;grid-template-columns:repeat(3,1fr);padding:0.75rem 1rem;flex-shrink:0;}
+.us-block{padding:0 0.75rem;border-right:1px solid var(--border);}
 .us-block:first-child{padding-left:0;}.us-block:last-child{border-right:none;}
-.us-val{font-family:'Bebas Neue',sans-serif;font-size:2rem;color:var(--gold);line-height:1;}
-.us-lbl{font-family:'IBM Plex Mono',monospace;font-size:0.56rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-top:0.2rem;}
-.log-area{flex:1;padding:1.25rem;overflow:auto;}
+.us-val{font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:var(--gold);line-height:1;}
+.us-lbl{font-family:'IBM Plex Mono',monospace;font-size:0.55rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-top:0.2rem;}
+.log-area{flex:1;padding:1rem;overflow:auto;}
 .sess-item{display:flex;justify-content:space-between;align-items:center;padding:0.45rem 0;border-bottom:1px solid var(--border);}
 .sess-item:last-child{border-bottom:none;}
 .si-name{font-size:0.8rem;font-weight:600;}
@@ -237,31 +304,7 @@ tbody tr:last-child td{border-bottom:none;}
 /* ── CAMERA SCANNER ── */
 .cam-btn{width:44px;height:44px;background:var(--gold);border:none;border-radius:3px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;transition:all 0.15s;}
 .cam-btn:hover{background:#f5cc55;box-shadow:0 4px 16px rgba(240,192,64,0.4);}
-.cam-btn.active{background:var(--red);}
-#cam-overlay{display:none;position:fixed;inset:0;background:#000;z-index:150;flex-direction:column;}
-#cam-overlay.open{display:flex;}
-#cam-topbar{height:54px;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:space-between;padding:0 1rem;flex-shrink:0;}
-#cam-topbar-title{font-family:'Bebas Neue',sans-serif;font-size:1.3rem;letter-spacing:0.06em;color:var(--gold);}
-#cam-close-btn{background:transparent;border:1px solid rgba(255,255,255,0.2);color:#fff;font-family:'IBM Plex Mono',monospace;font-size:0.7rem;padding:0.3rem 0.75rem;cursor:pointer;border-radius:2px;letter-spacing:0.06em;}
-#cam-reader{flex:1;position:relative;overflow:hidden;}
-#cam-reader video{width:100%!important;height:100%!important;object-fit:cover;}
-#cam-reader img{display:none!important;}
-/* Override html5-qrcode default styles */
-#cam-reader__scan_region{width:100%!important;height:100%!important;}
-#cam-reader__scan_region > img{display:none!important;}
-#cam-reader__dashboard{display:none!important;}
-.cam-aim{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:10;}
-.cam-aim-box{width:260px;height:160px;position:relative;}
-.cam-aim-box::before,.cam-aim-box::after,.cam-corner-bl,.cam-corner-tr{content:'';position:absolute;width:32px;height:32px;border-color:var(--gold);border-style:solid;}
-.cam-aim-box::before{top:0;left:0;border-width:3px 0 0 3px;}
-.cam-aim-box::after{top:0;right:0;border-width:3px 3px 0 0;}
-.cam-corner-bl{bottom:0;left:0;border-width:0 0 3px 3px;}
-.cam-corner-tr{bottom:0;right:0;border-width:0 3px 3px 0;}
-.cam-scanline{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent);animation:scanline 1.5s ease-in-out infinite;}
-@keyframes scanline{0%,100%{top:5%}50%{top:90%}}
-#cam-status{height:64px;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;flex-shrink:0;}
-#cam-status-txt{font-family:'IBM Plex Mono',monospace;font-size:0.72rem;color:var(--muted);}
-#cam-status-code{font-family:'Bebas Neue',sans-serif;font-size:1.1rem;color:var(--green);letter-spacing:0.05em;min-height:1.4rem;}
+.cam-btn:active{transform:scale(0.95);}
 
 /* ── TOAST ── */
 #toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--sur2);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:0.76rem;padding:0.85rem 1.25rem;border-left:3px solid var(--green);border-radius:4px;z-index:200;transform:translateX(120%);transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1);max-width:320px;box-shadow:0 8px 40px var(--shadow);}
@@ -592,84 +635,121 @@ create policy "public" on config for all using (true) with check (true);</code>
       <button class="tb-btn" onclick="userLogout()">Switch User</button>
     </div>
   </div>
+  <!-- Mobile tab bar -->
+  <div class="mobile-tabs">
+    <button class="mob-tab on" id="tab-scan-btn" onclick="mobTab('scan')">⬛ Scan</button>
+    <button class="mob-tab" id="tab-hist-btn" onclick="mobTab('hist')">📋 History</button>
+  </div>
+
   <div class="user-wrap">
-    <div class="scan-panel">
-      <div>
-        <div class="sp-lbl">Scan Barcode</div>
-        <div style="display:flex;gap:0.5rem;align-items:stretch;">
-          <div class="scan-wrap" style="flex:1;">
-            <span class="scan-ico">⬛</span>
-            <input class="inp" type="text" id="scan-in" placeholder="Scan or type code…" autocomplete="off" style="padding-left:2.6rem;font-size:0.95rem;font-weight:600;border-width:2px;"/>
+
+    <!-- SCAN PANEL -->
+    <div class="mob-panel on" id="mob-scan">
+      <div class="scan-panel">
+        <div class="scan-panel-body">
+
+          <!-- Barcode + Camera -->
+          <div>
+            <div class="sp-lbl">Scan Barcode</div>
+            <div style="display:flex;gap:0.5rem;align-items:stretch;">
+              <div class="scan-wrap" style="flex:1;">
+                <span class="scan-ico">⬛</span>
+                <input class="inp" type="text" id="scan-in" placeholder="Scan or type barcode…" autocomplete="off" style="padding-left:2.6rem;font-size:0.95rem;font-weight:600;border-width:2px;"/>
+              </div>
+              <button class="cam-btn" id="cam-btn" onclick="openNativeScanner()" title="Scan with camera">📷</button>
+            </div>
+            <input type="file" id="native-cam" accept="image/*" capture="environment" style="display:none;" onchange="processNativeCapture(this)"/>
           </div>
-          <button class="cam-btn" id="cam-btn" onclick="toggleCamera()" title="Scan with camera">📷</button>
+
+          <!-- Name Search -->
+          <div>
+            <div class="sp-lbl">Search by Name</div>
+            <div class="isearch-wrap">
+              <input class="inp" type="text" id="inv-search" placeholder="Type product name…" oninput="invSearch()" autocomplete="off"/>
+              <div class="isearch-drop" id="inv-drop"></div>
+            </div>
+          </div>
+
+          <!-- Product Card -->
+          <div>
+            <div class="sp-lbl">Product</div>
+            <div class="prod-card" id="prod-card"><div style="color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:0.72rem;text-align:center;">Awaiting scan…</div></div>
+          </div>
+
+          <!-- Qty + Expiry in a row on mobile to save space -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;">
+            <div>
+              <div class="sp-lbl">Qty</div>
+              <div class="qty-row">
+                <button class="qty-step" onclick="stepQ(-1)">−</button>
+                <input class="inp qty-inp" type="number" id="qty-in" value="1" min="0" style="font-size:1.6rem;"/>
+                <button class="qty-step" onclick="stepQ(1)">+</button>
+              </div>
+            </div>
+            <div>
+              <div class="sp-lbl">Expiry <span style="font-size:0.55rem;color:var(--muted);font-weight:400;">(opt)</span></div>
+              <input class="inp" type="date" id="exp-in" style="border-width:2px;font-size:0.8rem;height:44px;"/>
+            </div>
+          </div>
+
+          <!-- Session (desktop only, hidden on mobile — see History tab) -->
+          <div style="display:none;" class="desktop-only-sess">
+            <div class="sp-lbl">My Session</div>
+            <div id="sess-list-desktop"></div>
+          </div>
+
         </div>
-      </div>
-      <div>
-        <div class="sp-lbl">Search by Name</div>
-        <div class="isearch-wrap">
-          <input class="inp" type="text" id="inv-search" placeholder="Type product name…" oninput="invSearch()" autocomplete="off"/>
-          <div class="isearch-drop" id="inv-drop"></div>
+
+        <!-- RECORD BUTTON — always visible, sticky bottom -->
+        <div class="scan-panel-footer">
+          <!-- Mini stats bar -->
+          <div style="display:flex;gap:0;margin-bottom:0.6rem;background:var(--bg2);border:1px solid var(--border);border-radius:3px;overflow:hidden;">
+            <div style="flex:1;padding:0.4rem 0.5rem;text-align:center;border-right:1px solid var(--border);">
+              <div style="font-family:'Bebas Neue',sans-serif;font-size:1.3rem;color:var(--gold);line-height:1;" id="u-sc">0</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:0.52rem;color:var(--muted);text-transform:uppercase;">Scans</div>
+            </div>
+            <div style="flex:1;padding:0.4rem 0.5rem;text-align:center;border-right:1px solid var(--border);">
+              <div style="font-family:'Bebas Neue',sans-serif;font-size:1.3rem;color:var(--gold);line-height:1;" id="u-pr">0</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:0.52rem;color:var(--muted);text-transform:uppercase;">Products</div>
+            </div>
+            <div style="flex:1;padding:0.4rem 0.5rem;text-align:center;">
+              <div style="font-family:'Bebas Neue',sans-serif;font-size:1.3rem;color:var(--gold);line-height:1;" id="u-un">0</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:0.52rem;color:var(--muted);text-transform:uppercase;">Units</div>
+            </div>
+          </div>
+          <button class="btn btn-green" id="rec-btn" onclick="recordScan()" disabled style="height:52px;font-size:0.9rem;">✔ Record Scan</button>
         </div>
-      </div>
-      <div>
-        <div class="sp-lbl">Product</div>
-        <div class="prod-card" id="prod-card"><div style="color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:0.72rem;text-align:center;">Awaiting scan…</div></div>
-      </div>
-      <div>
-        <div class="sp-lbl">Quantity</div>
-        <div class="qty-row">
-          <button class="qty-step" onclick="stepQ(-1)">−</button>
-          <input class="inp qty-inp" type="number" id="qty-in" value="1" min="0"/>
-          <button class="qty-step" onclick="stepQ(1)">+</button>
-        </div>
-      </div>
-      <div>
-        <div class="sp-lbl">Expiry Date <span style="font-family:'IBM Plex Mono',monospace;font-size:0.58rem;color:var(--muted);font-weight:400;">(optional)</span></div>
-        <input class="inp" type="date" id="exp-in" style="border-width:2px;font-size:0.85rem;"/>
-      </div>
-      <button class="btn btn-green" id="rec-btn" onclick="recordScan()" disabled>✔ Record Scan</button>
-      <div style="flex:1;overflow:auto;">
-        <div class="sp-lbl">My Session</div>
-        <div id="sess-list"><div style="color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:0.7rem;text-align:center;padding:1rem 0;">No scans yet</div></div>
       </div>
     </div>
-    <div class="log-panel">
-      <div class="u-stats">
-        <div class="us-block"><div class="us-val" id="u-sc">0</div><div class="us-lbl">My Scans</div></div>
-        <div class="us-block"><div class="us-val" id="u-pr">0</div><div class="us-lbl">Products</div></div>
-        <div class="us-block"><div class="us-val" id="u-un">0</div><div class="us-lbl">Units</div></div>
-      </div>
-      <div class="log-area">
-        <div class="dtable">
-          <div class="dt-head"><div class="dt-title">My Scan History</div></div>
-          <div class="dt-scroll"><table><thead><tr><th>#</th><th>Time</th><th>Code</th><th>Product</th><th>Expiry</th><th>Qty</th></tr></thead><tbody id="ulog-tb"></tbody></table></div>
-          <div class="empty-row" id="ulog-empty"><div class="ei">📭</div>No scans yet</div>
+
+    <!-- HISTORY PANEL (mobile tab 2 / desktop right panel) -->
+    <div class="mob-panel" id="mob-hist">
+      <div class="log-panel" style="display:flex;height:100%;">
+        <div class="u-stats">
+          <div class="us-block"><div class="us-val" id="u-sc2">0</div><div class="us-lbl">My Scans</div></div>
+          <div class="us-block"><div class="us-val" id="u-pr2">0</div><div class="us-lbl">Products</div></div>
+          <div class="us-block"><div class="us-val" id="u-un2">0</div><div class="us-lbl">Units</div></div>
+        </div>
+        <div class="log-area">
+          <!-- Session list -->
+          <div style="margin-bottom:1rem;">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:0.62rem;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:0.5rem;">My Session</div>
+            <div id="sess-list"><div style="color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:0.7rem;text-align:center;padding:1rem 0;">No scans yet</div></div>
+          </div>
+          <!-- Full log table -->
+          <div class="dtable">
+            <div class="dt-head"><div class="dt-title">Full History</div></div>
+            <div class="dt-scroll"><table><thead><tr><th>#</th><th>Time</th><th>Code</th><th>Product</th><th>Expiry</th><th>Qty</th></tr></thead><tbody id="ulog-tb"></tbody></table></div>
+            <div class="empty-row" id="ulog-empty"><div class="ei">📭</div>No scans yet</div>
+          </div>
         </div>
       </div>
     </div>
+
   </div>
 </div>
 
-<!-- CAMERA SCANNER OVERLAY -->
-<div id="cam-overlay">
-  <div id="cam-topbar">
-    <div id="cam-topbar-title">📷 Scan Barcode</div>
-    <button id="cam-close-btn" onclick="stopCamera()">✕ Close</button>
-  </div>
-  <div id="cam-reader">
-    <div class="cam-aim">
-      <div class="cam-aim-box">
-        <div class="cam-scanline"></div>
-        <div class="cam-corner-bl"></div>
-        <div class="cam-corner-tr"></div>
-      </div>
-    </div>
-  </div>
-  <div id="cam-status">
-    <div id="cam-status-txt">Point camera at any barcode</div>
-    <div id="cam-status-code"></div>
-  </div>
-</div>
+<!-- Native camera - no overlay needed -->
 
 <!-- MODALS -->
 <div class="overlay" id="dup-modal">
@@ -1075,7 +1155,13 @@ function resetScanUI(){
 //  USER RENDERS
 // ═══════════════════════════════════════════════════
 function renderULog(){var mine=scanLog.filter(function(e){return e.user===curUser;});var tb=$('ulog-tb');if(!mine.length){tb.innerHTML='';$('ulog-empty').style.display='block';return;}$('ulog-empty').style.display='none';tb.innerHTML=mine.map(function(e,i){return'<tr><td style="color:var(--muted)">'+(mine.length-i)+'</td><td style="color:var(--muted)">'+e.time+'</td><td style="color:var(--gold)">'+e.code+'</td><td class="td-name">'+e.name+'</td><td>'+fmtExp(e.expiry)+'</td><td><span class="tag t-qty">'+e.qty+'</span></td></tr>';}).join('');}
-function updateUStats(){var mine=scanLog.filter(function(e){return e.user===curUser;});$('u-sc').textContent=mine.length;$('u-pr').textContent=new Set(mine.map(function(e){return e.code;})).size;$('u-un').textContent=mine.reduce(function(s,e){return s+(e.qty||0);},0);}
+function updateUStats(){
+  var mine=scanLog.filter(function(e){return e.user===curUser;});
+  var sc=mine.length, pr=new Set(mine.map(function(e){return e.code;})).size, un=mine.reduce(function(s,e){return s+(e.qty||0);},0);
+  ['u-sc','u-sc2'].forEach(function(id){if($(id))$(id).textContent=sc;});
+  ['u-pr','u-pr2'].forEach(function(id){if($(id))$(id).textContent=pr;});
+  ['u-un','u-un2'].forEach(function(id){if($(id))$(id).textContent=un;});
+}
 function renderSess(){var mine=scanLog.filter(function(e){return e.user===curUser;});var list=$('sess-list');if(!mine.length){list.innerHTML='<div style="color:var(--muted);font-family:\'IBM Plex Mono\',monospace;font-size:0.7rem;text-align:center;padding:1rem 0;">No scans yet</div>';return;}list.innerHTML=mine.map(function(e){return'<div class="sess-item"><div><div class="si-name">'+e.name+'</div><div class="si-code">'+e.code+'</div></div><span class="tag t-qty">'+e.qty+'</span></div>';}).join('');}
 
 // ═══════════════════════════════════════════════════
@@ -1108,87 +1194,94 @@ function exportXL(){if(!scanLog.length){toast('No data to export','err');return;
 function clearAllScans(){saving(true);sbDelete('scans','code=neq.null').then(function(){scanLog=[];$('clear-modal').classList.remove('open');refreshDash();toast('All records deleted','warn');}).catch(function(e){toast('Error: '+e.message,'err');}).finally(function(){saving(false);});}
 
 // ═══════════════════════════════════════════════════
-//  CAMERA BARCODE SCANNER (html5-qrcode — fast & reliable)
+//  NATIVE CAMERA BARCODE SCANNER
+//  Uses the phone's built-in camera — instant & reliable
+//  Works like Google Sheets / inventory apps
 // ═══════════════════════════════════════════════════
-var html5Qr=null, camActive=false, lastCode='', lastCodeTime=0;
 
-function toggleCamera(){
-  if(camActive) stopCamera();
-  else startCamera();
+function openNativeScanner(){
+  // On mobile: opens native camera. On desktop: opens file picker.
+  $('native-cam').value='';
+  $('native-cam').click();
 }
 
-function startCamera(){
-  if(typeof Html5Qrcode==='undefined'){toast('Scanner not loaded yet, try again','err');return;}
-  $('cam-overlay').classList.add('open');
-  $('cam-btn').classList.add('active');
-  $('cam-btn').textContent='🔴';
-  $('cam-status-txt').textContent='Starting camera…';
-  $('cam-status-code').textContent='';
-  camActive=true;
-  lastCode=''; lastCodeTime=0;
+function processNativeCapture(input){
+  if(!input.files||!input.files[0]) return;
+  var file=input.files[0];
+  $('cam-btn').textContent='⏳';
 
-  html5Qr=new Html5Qrcode('cam-reader');
+  // Use BarcodeDetector API if available (Chrome Android — very fast, native)
+  if('BarcodeDetector' in window){
+    var detector=new BarcodeDetector({
+      formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','code_93','itf','qr_code','data_matrix']
+    });
+    createImageBitmap(file).then(function(img){
+      return detector.detect(img);
+    }).then(function(barcodes){
+      $('cam-btn').textContent='📷';
+      if(barcodes&&barcodes.length>0){
+        var code=barcodes[0].rawValue;
+        if(navigator.vibrate) navigator.vibrate(80);
+        $('scan-in').value=code;
+        pickProd(code);
+      } else {
+        toast('No barcode found in image — try again','warn');
+      }
+    }).catch(function(){
+      $('cam-btn').textContent='📷';
+      toast('Could not read image','err');
+    });
+    return;
+  }
 
-  var config={
-    fps:30,                          // High frame rate = faster detection
-    qrbox:false,                     // No box restriction = scan anywhere
-    aspectRatio:1.7778,              // 16:9
-    disableFlip:false,
-    experimentalFeatures:{useBarCodeDetectorIfSupported:true}, // Use native API if available (Chrome Android = very fast)
-    formatsToSupport:[               // All common barcode formats
-      Html5QrcodeSupportedFormats.EAN_13,
-      Html5QrcodeSupportedFormats.EAN_8,
-      Html5QrcodeSupportedFormats.UPC_A,
-      Html5QrcodeSupportedFormats.UPC_E,
-      Html5QrcodeSupportedFormats.CODE_128,
-      Html5QrcodeSupportedFormats.CODE_39,
-      Html5QrcodeSupportedFormats.ITF,
-      Html5QrcodeSupportedFormats.QR_CODE,
-    ]
-  };
+  // Fallback: use ZXing via canvas for browsers without BarcodeDetector
+  var img=new Image();
+  img.onload=function(){
+    var canvas=document.createElement('canvas');
+    canvas.width=img.width; canvas.height=img.height;
+    var ctx=canvas.getContext('2d');
+    ctx.drawImage(img,0,0);
+    var imageData=ctx.getImageData(0,0,canvas.width,canvas.height);
 
-  // Try back camera first
-  Html5Qrcode.getCameras().then(function(cameras){
-    if(!cameras||!cameras.length){toast('No camera found','err');stopCamera();return;}
-    // Prefer back/environment camera
-    var cam=cameras.find(function(c){return c.label.toLowerCase().includes('back')||c.label.toLowerCase().includes('rear')||c.label.toLowerCase().includes('environment');});
-    var camId=cam?cam.id:cameras[cameras.length-1].id;
-    $('cam-status-txt').textContent='Camera ready — point at barcode';
-
-    return html5Qr.start(
-      camId,
-      config,
-      function(code){
-        // Debounce — ignore same code within 2s
-        var now=Date.now();
-        if(code===lastCode&&(now-lastCodeTime)<2000) return;
-        lastCode=code; lastCodeTime=now;
-        $('cam-status-code').textContent='✔ '+code;
-        $('cam-status-txt').textContent='Found!';
-        if(navigator.vibrate) navigator.vibrate([80,30,80]);
-        setTimeout(function(){
-          stopCamera();
+    // Try to decode using BarcodeDetector polyfill approach
+    if(typeof ZXing!=='undefined'){
+      var hints=new Map();
+      var reader=new ZXing.MultiFormatReader();
+      try{
+        var binaryBitmap=new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(
+          new ZXing.RGBLuminanceSource(imageData.data,canvas.width,canvas.height)
+        ));
+        var result=reader.decode(binaryBitmap);
+        $('cam-btn').textContent='📷';
+        if(result){
+          var code=result.getText();
+          if(navigator.vibrate) navigator.vibrate(80);
           $('scan-in').value=code;
           pickProd(code);
-        },300);
-      },
-      function(){} // ignore decode errors (called constantly while scanning)
-    );
-  }).catch(function(e){
-    toast('Camera error: '+(e.message||e),'err');
-    stopCamera();
-  });
+        }
+      } catch(e){
+        $('cam-btn').textContent='📷';
+        toast('No barcode detected — try again','warn');
+      }
+    } else {
+      $('cam-btn').textContent='📷';
+      toast('Barcode detection not supported on this browser','err');
+    }
+    URL.revokeObjectURL(img.src);
+  };
+  img.src=URL.createObjectURL(file);
 }
 
-function stopCamera(){
-  camActive=false;
-  $('cam-btn').classList.remove('active');
-  $('cam-btn').textContent='📷';
-  $('cam-overlay').classList.remove('open');
-  if(html5Qr){
-    html5Qr.stop().catch(function(){});
-    html5Qr=null;
-  }
+// ═══════════════════════════════════════════════════
+//  MOBILE TABS
+// ═══════════════════════════════════════════════════
+function mobTab(t){
+  ['scan','hist'].forEach(function(n){
+    $('mob-'+n).classList.toggle('on', n===t);
+    $('tab-'+n+'-btn').classList.toggle('on', n===t);
+  });
+  // sync stats
+  if(t==='hist'){ updateUStats(); renderSess(); }
 }
 
 // ═══════════════════════════════════════════════════

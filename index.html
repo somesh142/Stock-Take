@@ -1023,8 +1023,13 @@ document.addEventListener('keydown',function(e){
   if($('s-admin-login').classList.contains('on'))adminLogin();
   if($('s-user-login').classList.contains('on'))userLogin();
   if($('s-user').classList.contains('on')){
-    if(document.activeElement.id==='scan-in')doBarcode();
-    if(document.activeElement.id==='qty-in')recordScan();
+    if(document.activeElement.id==='scan-in'){
+      e.preventDefault();
+      doBarcode();
+      // Move focus to qty — do NOT auto-record
+      setTimeout(function(){ if(curProd){$('qty-in').focus();$('qty-in').select();} },150);
+    }
+    // Removed: Enter on qty no longer auto-records — user must tap Record Scan
   }
 });
 
@@ -1102,7 +1107,18 @@ function clearInv(){
 // ═══════════════════════════════════════════════════
 //  SCAN
 // ═══════════════════════════════════════════════════
-function doBarcode(){var v=$('scan-in').value.trim();if(v){pickProd(v);$('scan-in').select();}}
+function doBarcode(){
+  var v=$('scan-in').value.trim();
+  if(!v) return;
+  pickProd(v);
+  // Focus qty after a short delay so user can enter quantity
+  setTimeout(function(){
+    if(curProd){
+      $('qty-in').focus();
+      $('qty-in').select();
+    }
+  },150);
+}
 
 function pickProd(code){
   var q=code.toLowerCase();

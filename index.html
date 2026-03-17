@@ -652,13 +652,13 @@ create policy "public" on config for all using (true) with check (true);</code>
           <div>
             <div class="sp-lbl">Scan Barcode</div>
             <div style="display:flex;gap:0.5rem;align-items:stretch;">
+              <button class="cam-btn" id="cam-btn" onclick="toggleCamera()" title="Scan with camera">📷</button>
               <div class="scan-wrap" style="flex:1;">
-                <span class="scan-ico">⬛</span>
-                <input class="inp" type="text" id="scan-in" placeholder="Scan or type barcode…" autocomplete="off" style="padding-left:2.6rem;font-size:0.95rem;font-weight:600;border-width:2px;"/>
+                <input class="inp" type="text" id="scan-in" placeholder="Type SKU or barcode…" autocomplete="off" style="font-size:0.95rem;font-weight:600;border-width:2px;padding:0.7rem 0.9rem;"/>
               </div>
-              <button class="cam-btn" onclick="doBarcode()" title="Search" style="background:var(--green);font-size:1rem;font-family:'IBM Plex Mono',monospace;font-weight:700;letter-spacing:0;color:#04150d;">Go</button>
-              <button class="cam-btn" id="cam-btn" onclick="toggleCamera()" title="Scan with camera" style="order:-1;">📷</button>
+              <button onclick="doBarcode()" style="background:var(--green);color:#04150d;border:none;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:0.85rem;padding:0 1.1rem;border-radius:3px;cursor:pointer;white-space:nowrap;letter-spacing:0.05em;">🔍 Search</button>
             </div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:0.62rem;color:var(--muted);margin-top:0.35rem;">Type SKU or barcode → tap Search to find product</div>
           </div>
 
           <!-- Name Search -->

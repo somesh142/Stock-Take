@@ -829,7 +829,7 @@ create policy "public" on config for all using (true) with check (true);</code>
 // ═══════════════════════════════════════════════════
 // ── HARDCODED — no setup needed ──
 var SB_URL = 'https://hwrdiawrlfaksctofsfz.supabase.co';
-var SB_KEY = 'PASTE_YOUR_ANON_KEY_HERE';
+var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3cmRpYXdybGZha3NjdG9mc2Z6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1NTk1NDgsImV4cCI6MjA4OTEzNTU0OH0._HhXE_5xpwH8YylrgkHWJ1uHRwlf1dFqErS1aKCcdWY';
 
 // ═══════════════════════════════════════════════════
 //  STATE
@@ -1046,17 +1046,15 @@ function saveCreds(){
 //  KEYBOARD
 // ═══════════════════════════════════════════════════
 document.addEventListener('keydown',function(e){
-  if(e.key!=='Enter')return;
-  if($('s-admin-login').classList.contains('on'))adminLogin();
-  if($('s-user-login').classList.contains('on'))userLogin();
+  if(e.key!=='Enter') return;
+  if($('s-admin-login').classList.contains('on')) adminLogin();
+  if($('s-user-login').classList.contains('on'))  userLogin();
   if($('s-user').classList.contains('on')){
     if(document.activeElement.id==='scan-in'){
       e.preventDefault();
       doBarcode();
-      // Move focus to qty — do NOT auto-record
-      setTimeout(function(){ if(curProd){$('qty-in').focus();$('qty-in').select();} },150);
     }
-    // Removed: Enter on qty no longer auto-records — user must tap Record Scan
+    // NOTE: Enter on qty-in does NOT record — user must tap Record Scan button
   }
 });
 
@@ -1136,15 +1134,20 @@ function clearInv(){
 // ═══════════════════════════════════════════════════
 function doBarcode(){
   var v=$('scan-in').value.trim();
-  if(!v) return;
+  if(!v){ toast('Enter a barcode or SKU first','warn'); return; }
   pickProd(v);
-  // Focus qty after a short delay so user can enter quantity
+  // Just show the product — user enters qty then taps Record Scan
   setTimeout(function(){
     if(curProd){
+      // Reset qty to blank so user must enter it
+      $('qty-in').value='';
       $('qty-in').focus();
       $('qty-in').select();
+      toast('Product found — enter qty then tap Record Scan');
+    } else {
+      toast('"'+v+'" not found in inventory','err');
     }
-  },150);
+  },100);
 }
 
 function pickProd(code){
@@ -1156,7 +1159,7 @@ function pickProd(code){
     var bcs=[p.bc1,p.bc2,p.bc3,p.bc4].filter(Boolean);
     card.className='prod-card found';
     card.innerHTML='<div class="pc-code">'+p.code+'</div><div class="pc-name">'+p.name+'</div><div class="pc-meta">'+(p.category?'<span>📁 '+p.category+'</span>':'')+(p.expected?'<span>📊 Exp: '+p.expected+'</span>':'')+(p.tax?'<span>🧾 '+p.tax+'</span>':'')+(bcs.length?'<span>🔲 '+bcs.join(' · ')+'</span>':'')+'</div>';
-    btn.disabled=false;$('qty-in').focus();$('qty-in').select();
+    btn.disabled=false;$('qty-in').value='';
   } else {
     curProd=null;card.className='prod-card nope';
     card.innerHTML='<div style="color:var(--red);font-family:\'IBM Plex Mono\',monospace;font-size:0.75rem;">⚠ <strong>'+code+'</strong> not found</div>';
@@ -1177,8 +1180,9 @@ function invSearch(){
 function stepQ(d){$('qty-in').value=Math.max(0,(parseInt($('qty-in').value)||0)+d);}
 
 function recordScan(){
-  if(!curProd)return;
+  if(!curProd){ toast('Scan or search a product first','err'); return; }
   var qty=parseInt($('qty-in').value)||0;
+  if(qty<=0){ toast('Please enter a quantity','warn'); $('qty-in').focus(); return; }
   var exRaw=$('exp-in').value;
   var expiry=exRaw?new Date(exRaw).toLocaleDateString('en-AU'):'';
   var now=new Date();
@@ -1350,16 +1354,22 @@ function startDetection(video){
 }
 
 function onFound(code){
-  // Show found state
+  // Show found flash
   $('cam-found').style.display='flex';
   $('cam-code').textContent=code;
-  setCamStatus('✔ Barcode detected!');
+  setCamStatus('✔ Found — enter qty to save');
   if(navigator.vibrate) navigator.vibrate([50,30,50]);
   setTimeout(function(){
     stopCamera();
     $('scan-in').value=code;
     pickProd(code);
-  },500);
+    // Reset qty so user must enter it manually
+    setTimeout(function(){
+      $('qty-in').value='';
+      $('qty-in').focus();
+      $('qty-in').select();
+    },200);
+  },400);
 }
 
 function setCamStatus(msg){

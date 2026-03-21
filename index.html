@@ -1006,8 +1006,31 @@ function loadScans(){
   }).catch(function(){});
 }
 
-function loadInventory(){window._invLoading=true;
-  // Fetch all rows by paginating (Supabase default limit = 1000)
+function loadInventory(){
+  window._invLoading=true;
+  var CACHE_KEY='stp_inv_cache';
+  var CACHE_TIME_KEY='stp_inv_time';
+  var CACHE_MAX_AGE=3600000; // 1 hour
+
+  // Try loading from cache first (instant)
+  try{
+    var cached=localStorage.getItem(CACHE_KEY);
+    var cachedTime=parseInt(localStorage.getItem(CACHE_TIME_KEY)||'0');
+    if(cached&&(Date.now()-cachedTime)<CACHE_MAX_AGE){
+      inventory=JSON.parse(cached);
+      window._invLoading=false;
+      showInvInfo();
+      // Silently refresh in background
+      fetchInventoryFromSupabase(true);
+      return Promise.resolve();
+    }
+  }catch(e){}
+
+  // No cache — fetch fresh
+  return fetchInventoryFromSupabase(false);
+}
+
+function fetchInventoryFromSupabase(background){
   var all=[], offset=0, limit=1000;
   function fetchPage(){
     return sbGet('inventory','select=*&order=name.asc&limit='+limit+'&offset='+offset)
@@ -1020,15 +1043,16 @@ function loadInventory(){window._invLoading=true;
           bc3:String(r.bc3||''),bc4:String(r.bc4||''),tax:String(r.tax||'')
         };});
         window._invLoading=false;
-        showInvInfo();
+        try{
+          localStorage.setItem('stp_inv_cache',JSON.stringify(inventory));
+          localStorage.setItem('stp_inv_time',String(Date.now()));
+        }catch(e){}
+        if(!background) showInvInfo();
       });
   }
-  return fetchPage().catch(function(){});
+  return fetchPage().catch(function(){window._invLoading=false;});
 }
 
-// ═══════════════════════════════════════════════════
-//  AUTH
-// ═══════════════════════════════════════════════════
 function adminLogin(){
   var u=$('a-user').value.trim(),p=$('a-pass').value;
   loadCreds().then(function(){
@@ -1124,6 +1148,8 @@ function saveInventory(){
     })
     .then(function(){
       inventory=parsed.sort(function(a,b){return a.name.localeCompare(b.name);});
+      // Clear cache so all devices reload fresh inventory
+      try{localStorage.removeItem('stp_inv_cache');localStorage.removeItem('stp_inv_time');}catch(e){}
       $('col-map').style.display='none';
       showInvInfo();
       toast('✔ '+parsed.length+' products saved');

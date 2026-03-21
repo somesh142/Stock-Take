@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <title>StockTake Pro</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.18.6/umd/index.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -1365,18 +1365,22 @@ function startCamera(){
         // Choose detection method based on device support
         if('BarcodeDetector' in window){
           useNativeDetector(v);
-        } else if(typeof ZXing!=='undefined'){
+        } else if(typeof Quagga!=='undefined'){
+          // Stop stream — Quagga will create its own
+          if(camStream){camStream.getTracks().forEach(function(t){t.stop();});camStream=null;}
+          v.srcObject=null;
           useZXing(v);
         } else {
           setCamStatus('Loading scanner…');
-          // Wait for ZXing to load
           var wait=setInterval(function(){
-            if(typeof ZXing!=='undefined'){
+            if(typeof Quagga!=='undefined'){
               clearInterval(wait);
+              if(camStream){camStream.getTracks().forEach(function(t){t.stop();});camStream=null;}
+              v.srcObject=null;
               useZXing(v);
             }
           },200);
-          setTimeout(function(){clearInterval(wait);setCamStatus('Scanner unavailable — type barcode manually');},5000);
+          setTimeout(function(){clearInterval(wait);setCamStatus('Scanner unavailable — type barcode manually');},8000);
         }
       });
     })
@@ -1412,32 +1416,69 @@ function useNativeDetector(video){
   camRAF=requestAnimationFrame(detect);
 }
 
-// ── Method 2: ZXing BrowserMultiFormatReader (iOS Safari + Chrome) ──
+// ── Method 2: QuaggaJS (iOS Safari + Chrome — works on all browsers) ──
 function useZXing(video){
   setCamStatus('Point camera at barcode');
-  try{
-    // Use the higher-level BrowserMultiFormatReader which handles everything
-    var codeReader = new ZXing.BrowserMultiFormatReader();
-    zxingReader = codeReader;
+  
+  // Get the video stream track to get device ID
+  var tracks = camStream ? camStream.getVideoTracks() : [];
+  var deviceId = tracks.length > 0 ? tracks[0].getSettings().deviceId : undefined;
 
-    // Decode continuously from video element
-    codeReader.decodeFromVideoElement(video, function(result, err){
-      if(!camActive) return;
-      if(result){
-        var code = result.getText();
-        var now = Date.now();
-        if(code && (code !== lastScan || (now - lastScanTime) > 2000)){
-          lastScan = code; lastScanTime = now;
-          onFound(code);
-        }
+  Quagga.init({
+    inputStream:{
+      name:'Live',
+      type:'LiveStream',
+      target: $('cam-video').parentElement,
+      constraints:{
+        facingMode:'environment',
+        width:{ideal:1280},
+        height:{ideal:720}
       }
-      // err is expected when no barcode found — ignore it
-    });
-  }catch(e){
-    console.error('ZXing error:',e);
-    // Last resort fallback
-    setCamStatus('Scanner error — type barcode manually');
+    },
+    locator:{patchSize:'medium', halfSample:true},
+    numOfWorkers: 0,
+    frequency: 10,
+    decoder:{
+      readers:[
+        'ean_reader',
+        'ean_8_reader',
+        'upc_reader',
+        'upc_e_reader',
+        'code_128_reader',
+        'code_39_reader',
+        'code_93_reader',
+        'i2of5_reader',
+        'codabar_reader'
+      ]
+    },
+    locate:true
+  }, function(err){
+    if(err){
+      console.error('Quagga init error:', err);
+      setCamStatus('Scanner error — type manually');
+      return;
+    }
+    Quagga.start();
+    setCamStatus('Point camera at barcode');
+  });
+
+  // Stop the original stream since Quagga creates its own
+  if(camStream){
+    camStream.getTracks().forEach(function(t){t.stop();});
+    camStream=null;
   }
+
+  Quagga.onDetected(function(result){
+    if(!camActive) return;
+    var code = result.codeResult.code;
+    var now = Date.now();
+    if(code && (code !== lastScan || (now - lastScanTime) > 2000)){
+      lastScan = code; lastScanTime = now;
+      onFound(code);
+    }
+  });
+  
+  zxingReader = 'quagga'; // flag so stopCamera knows to stop Quagga
 }
 
 function onFound(code){
@@ -1467,7 +1508,13 @@ function stopCamera(){
   $('cam-overlay').style.display='none';
   $('cam-found').style.display='none';
   if(camRAF){cancelAnimationFrame(camRAF);camRAF=null;}
-  if(zxingReader){try{zxingReader.reset();}catch(e){}zxingReader=null;}
+  // Stop Quagga if running
+  if(zxingReader==='quagga'){
+    try{Quagga.stop();}catch(e){}
+  } else if(zxingReader){
+    try{zxingReader.reset();}catch(e){}
+  }
+  zxingReader=null;
   if(camStream){camStream.getTracks().forEach(function(t){t.stop();});camStream=null;}
   var v=$('cam-video');
   if(v&&v.srcObject){v.srcObject.getTracks().forEach(function(t){t.stop();});v.srcObject=null;}

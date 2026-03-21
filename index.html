@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <title>StockTake Pro</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.18.6/umd/index.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -1412,54 +1412,31 @@ function useNativeDetector(video){
   camRAF=requestAnimationFrame(detect);
 }
 
-// ── Method 2: ZXing (iOS Safari + iOS Chrome + all browsers) ──
+// ── Method 2: ZXing BrowserMultiFormatReader (iOS Safari + Chrome) ──
 function useZXing(video){
   setCamStatus('Point camera at barcode');
   try{
-    var hints=new Map();
-    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-    var reader=new ZXing.MultiFormatReader(hints);
-    zxingReader=reader;
+    // Use the higher-level BrowserMultiFormatReader which handles everything
+    var codeReader = new ZXing.BrowserMultiFormatReader();
+    zxingReader = codeReader;
 
-    var canvas=document.createElement('canvas');
-    var ctx=canvas.getContext('2d',{willReadFrequently:true});
-
-    function decode(){
+    // Decode continuously from video element
+    codeReader.decodeFromVideoElement(video, function(result, err){
       if(!camActive) return;
-      if(video.readyState<2){camRAF=requestAnimationFrame(decode);return;}
-
-      var w=video.videoWidth, h=video.videoHeight;
-      if(!w||!h){camRAF=requestAnimationFrame(decode);return;}
-
-      // Sample at lower res for speed
-      var scale=Math.min(1, 640/w);
-      canvas.width=Math.round(w*scale);
-      canvas.height=Math.round(h*scale);
-      ctx.drawImage(video,0,0,canvas.width,canvas.height);
-
-      try{
-        var imageData=ctx.getImageData(0,0,canvas.width,canvas.height);
-        var luminance=new ZXing.RGBLuminanceSource(imageData.data,canvas.width,canvas.height);
-        var bitmap=new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminance));
-        var result=reader.decode(bitmap);
-        if(result){
-          var code=result.getText();
-          var now=Date.now();
-          if(code&&(code!==lastScan||(now-lastScanTime)>2000)){
-            lastScan=code; lastScanTime=now;
-            onFound(code); return;
-          }
+      if(result){
+        var code = result.getText();
+        var now = Date.now();
+        if(code && (code !== lastScan || (now - lastScanTime) > 2000)){
+          lastScan = code; lastScanTime = now;
+          onFound(code);
         }
-      }catch(e){
-        // NotFoundException is normal — just means no barcode in frame yet
       }
-      // Use setTimeout instead of RAF for ZXing — gives it time to breathe
-      setTimeout(decode, 80);
-    }
-    decode();
+      // err is expected when no barcode found — ignore it
+    });
   }catch(e){
-    setCamStatus('Scanner error — type barcode manually');
     console.error('ZXing error:',e);
+    // Last resort fallback
+    setCamStatus('Scanner error — type barcode manually');
   }
 }
 
@@ -1490,10 +1467,10 @@ function stopCamera(){
   $('cam-overlay').style.display='none';
   $('cam-found').style.display='none';
   if(camRAF){cancelAnimationFrame(camRAF);camRAF=null;}
+  if(zxingReader){try{zxingReader.reset();}catch(e){}zxingReader=null;}
   if(camStream){camStream.getTracks().forEach(function(t){t.stop();});camStream=null;}
   var v=$('cam-video');
   if(v&&v.srcObject){v.srcObject.getTracks().forEach(function(t){t.stop();});v.srcObject=null;}
-  zxingReader=null;
 }
 
 // iOS file input fallback (kept for older iOS)

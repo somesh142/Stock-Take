@@ -11,6 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <title>StockTake Pro</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -314,6 +315,9 @@ tbody tr:last-child td{border-bottom:none;}
 
 #saving{position:fixed;top:62px;right:1rem;font-family:'IBM Plex Mono',monospace;font-size:0.62rem;color:var(--muted);display:none;align-items:center;gap:6px;z-index:50;background:var(--bg2);border:1px solid var(--border);padding:0.3rem 0.7rem;border-radius:3px;}
 #saving.show{display:flex;}
+#saving.synced{border-color:rgba(38,217,138,0.3);color:var(--green);}
+#saving.offline{border-color:rgba(240,192,64,0.3);color:var(--gold);}
+#saving.syncing{border-color:rgba(74,144,255,0.3);color:var(--blue);}
 .mini-spin{width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 0.6s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
 /* PWA INSTALL BANNER */
@@ -488,7 +492,10 @@ create policy "public" on config for all using (true) with check (true);</code>
       <!-- OVERVIEW -->
       <div class="a-tab on" id="tab-overview">
         <div class="pg-title">Overview</div>
-        <div class="pg-sub" id="ov-sub">Loading…</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;">
+        <div class="pg-sub" id="ov-sub" style="margin-bottom:0;">Loading…</div>
+        <button class="btn btn-ghost btn-sm" onclick="loadAll().then(refreshDash);window._lastPoll=Date.now();toast('Refreshed ✓')" style="width:auto;font-size:0.65rem;">↺ Refresh Now</button>
+      </div>
         <div class="stat-row">
           <div class="scard">  <div class="sv"   id="ov-total">0</div><div class="sl">Total Scans</div></div>
           <div class="scard g"><div class="sv g" id="ov-prods">0</div><div class="sl">Products Scanned</div></div>
@@ -652,13 +659,16 @@ create policy "public" on config for all using (true) with check (true);</code>
           <div>
             <div class="sp-lbl">Scan Barcode</div>
             <div style="display:flex;gap:0.5rem;align-items:stretch;">
-              <button class="cam-btn" id="cam-btn" onclick="toggleCamera()" title="Scan with camera">📷</button>
+              <!-- Camera button - shows live scanner on Android, file picker on iOS -->
+              <button class="cam-btn" id="cam-btn" onclick="openScanner()" title="Scan with camera">📷</button>
+              <!-- Hidden iOS file input -->
+              <input type="file" id="ios-cam" accept="image/*" capture="environment" style="display:none;" onchange="processIOSImage(this)"/>
               <div class="scan-wrap" style="flex:1;">
                 <input class="inp" type="text" id="scan-in" placeholder="Type SKU or barcode…" autocomplete="off" style="font-size:0.95rem;font-weight:600;border-width:2px;padding:0.7rem 0.9rem;"/>
               </div>
               <button onclick="doBarcode()" style="background:var(--green);color:#04150d;border:none;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:0.85rem;padding:0 1.1rem;border-radius:3px;cursor:pointer;white-space:nowrap;letter-spacing:0.05em;">🔍 Search</button>
             </div>
-            <div style="font-family:'IBM Plex Mono',monospace;font-size:0.62rem;color:var(--muted);margin-top:0.35rem;">Type SKU or barcode → tap Search to find product</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:0.62rem;color:var(--muted);margin-top:0.35rem;" id="scan-hint">Type SKU or barcode → tap Search · 📷 = camera scan</div>
           </div>
 
           <!-- Name Search -->
@@ -805,7 +815,7 @@ create policy "public" on config for all using (true) with check (true);</code>
   </div>
 </div>
 
-<div id="saving"><div class="mini-spin"></div>Saving…</div>
+<div id="saving"><span id="sync-icon">⏳</span><span id="sync-txt">Saving…</span></div>
 <div id="toast"></div>
 
 <!-- PWA INSTALL BANNER -->
@@ -844,7 +854,7 @@ var rawH=[],rawR=[],pollTimer=null;
 // ═══════════════════════════════════════════════════
 function $(id){return document.getElementById(id);}
 function toast(msg,type){var el=$('toast');el.textContent=msg;el.className='show'+(type?' t-'+type:'');clearTimeout(window._tt);window._tt=setTimeout(function(){el.className='';},3200);}
-function saving(v){$('saving').className=v?'show':'';}
+function saving(v){ if(v) showSyncStatus('','Saving…'); }
 function go(id){
   document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('on');});
   $(id).classList.add('on');
@@ -946,6 +956,7 @@ function resetSetup(){
 //  BOOT
 // ═══════════════════════════════════════════════════
 function startApp(){
+  startSyncTimer();
   $('setup-screen').style.display='none';
   loadAll().then(function(){go('s-entry');startPolling();})
     .catch(function(e){console.error(e);go('s-entry');toast('Load error: '+e.message,'err');});
@@ -956,11 +967,19 @@ function loadAll(){return Promise.all([loadCreds(),loadScans(),loadInventory()])
 function startPolling(){
   if(pollTimer)clearInterval(pollTimer);
   pollTimer=setInterval(function(){
-    loadScans().then(function(){
-      if(curRole==='admin')refreshDash();
-      if(curRole==='user'){renderULog();updateUStats();renderSess();}
-    });
-  },15000);
+    // Only poll if tab is visible
+    if(document.hidden) return;
+    // Admin polls every 5 min, user polls every 2 min
+    var now=Date.now();
+    var interval=curRole==='admin'?300000:120000;
+    if(!window._lastPoll||(now-window._lastPoll)>=interval){
+      window._lastPoll=now;
+      loadScans().then(function(){
+        if(curRole==='admin') refreshDash();
+        if(curRole==='user'){renderULog();updateUStats();renderSess();}
+      });
+    }
+  },30000); // Check every 30s but only actually fetch at intervals above
 }
 
 // ═══════════════════════════════════════════════════
@@ -1209,17 +1228,36 @@ function dupAct(action){
 }
 
 function commitScan(entry){
-  // Optimistic update
+  // Optimistic local update — instant feedback
   var idx=scanLog.findIndex(function(e){return e.code===entry.code;});
-  if(idx>-1)scanLog.splice(idx,1);
+  if(idx>-1) scanLog.splice(idx,1);
   scanLog.unshift(entry);
-  resetScanUI();renderULog();updateUStats();renderSess();
-  toast('✔ Saved — '+entry.qty+'× '+entry.name);
-  saving(true);
-  var row={code:entry.code,name:entry.name,category:entry.category,expected:entry.expected,bc1:entry.bc1,bc2:entry.bc2,bc3:entry.bc3,bc4:entry.bc4,tax:entry.tax,expiry:entry.expiry,qty:entry.qty,'user':entry.user,scan_date:entry.date,scan_time:entry.time,timestamp:entry.timestamp};
-  sbUpsert('scans',row)
-    .catch(function(e){toast('Save failed: '+e.message,'err');})
-    .finally(function(){saving(false);});
+  resetScanUI(); renderULog(); updateUStats(); renderSess();
+
+  var row={code:entry.code,name:entry.name,category:entry.category,expected:entry.expected,
+    bc1:entry.bc1,bc2:entry.bc2,bc3:entry.bc3,bc4:entry.bc4,tax:entry.tax,
+    expiry:entry.expiry,qty:entry.qty,'user':entry.user,
+    scan_date:entry.date,scan_time:entry.time,timestamp:entry.timestamp};
+
+  // Always queue locally first — guarantees no data loss
+  queueScan(row);
+  var pending=getPending();
+  toast('✔ '+entry.qty+'× '+entry.name+(navigator.onLine?'':' (offline)'));
+
+  if(navigator.onLine){
+    showSyncStatus('syncing','Saving…');
+    sbUpsert('scans',row)
+      .then(function(){
+        var p=getPending().filter(function(e){return e.code!==row.code;});
+        setPending(p);
+        showSyncStatus('synced','Saved ✓');
+      })
+      .catch(function(e){
+        showSyncStatus('offline','Queued — will retry');
+      });
+  } else {
+    showSyncStatus('offline','Offline · '+pending.length+' pending');
+  }
 }
 
 function resetScanUI(){
@@ -1277,6 +1315,217 @@ function clearAllScans(){saving(true);sbDelete('scans','code=neq.null').then(fun
 //  Falls back to getUserMedia + canvas on other browsers
 // ═══════════════════════════════════════════════════
 var camActive=false, camStream=null, camRAF=null, lastScan='', lastScanTime=0;
+
+// ═══════════════════════════════════════════════════
+//  UNIVERSAL BARCODE SCANNER
+//  Android Chrome: Native BarcodeDetector (fastest)
+//  iOS Safari/Chrome: ZXing via live video (works on all iOS)
+// ═══════════════════════════════════════════════════
+var camActive=false, camStream=null, camRAF=null;
+var lastScan='', lastScanTime=0;
+var zxingReader=null;
+
+function openScanner(){
+  toggleCamera();
+}
+
+function toggleCamera(){
+  if(camActive) stopCamera();
+  else startCamera();
+}
+
+function startCamera(){
+  $('cam-overlay').style.display='flex';
+  $('cam-found').style.display='none';
+  camActive=true;
+  $('cam-btn').textContent='🔴';
+  setCamStatus('Starting camera…');
+
+  var constraints={
+    video:{
+      facingMode:{ideal:'environment'},
+      width:{ideal:1280},
+      height:{ideal:720}
+    }
+  };
+
+  navigator.mediaDevices.getUserMedia(constraints)
+    .catch(function(){
+      return navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    })
+    .catch(function(){
+      return navigator.mediaDevices.getUserMedia({video:true});
+    })
+    .then(function(stream){
+      camStream=stream;
+      var v=$('cam-video');
+      v.srcObject=stream;
+      v.play().then(function(){
+        setCamStatus('Point camera at barcode');
+        // Choose detection method based on device support
+        if('BarcodeDetector' in window){
+          useNativeDetector(v);
+        } else if(typeof ZXing!=='undefined'){
+          useZXing(v);
+        } else {
+          setCamStatus('Loading scanner…');
+          // Wait for ZXing to load
+          var wait=setInterval(function(){
+            if(typeof ZXing!=='undefined'){
+              clearInterval(wait);
+              useZXing(v);
+            }
+          },200);
+          setTimeout(function(){clearInterval(wait);setCamStatus('Scanner unavailable — type barcode manually');},5000);
+        }
+      });
+    })
+    .catch(function(e){
+      setCamStatus('Camera error: '+e.message);
+      toast('Camera error — check permissions','err');
+      stopCamera();
+    });
+}
+
+// ── Method 1: Native BarcodeDetector (Android Chrome) ──
+function useNativeDetector(video){
+  setCamStatus('Point camera at barcode');
+  var detector=new BarcodeDetector({
+    formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','code_93','itf','qr_code','data_matrix']
+  });
+  function detect(){
+    if(!camActive) return;
+    if(video.readyState<2){camRAF=requestAnimationFrame(detect);return;}
+    detector.detect(video).then(function(results){
+      if(!camActive) return;
+      if(results&&results.length>0){
+        var code=results[0].rawValue;
+        var now=Date.now();
+        if(code&&(code!==lastScan||(now-lastScanTime)>2000)){
+          lastScan=code; lastScanTime=now;
+          onFound(code); return;
+        }
+      }
+      camRAF=requestAnimationFrame(detect);
+    }).catch(function(){ camRAF=requestAnimationFrame(detect); });
+  }
+  camRAF=requestAnimationFrame(detect);
+}
+
+// ── Method 2: ZXing (iOS Safari + iOS Chrome + all browsers) ──
+function useZXing(video){
+  setCamStatus('Point camera at barcode');
+  try{
+    var hints=new Map();
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    var reader=new ZXing.MultiFormatReader(hints);
+    zxingReader=reader;
+
+    var canvas=document.createElement('canvas');
+    var ctx=canvas.getContext('2d',{willReadFrequently:true});
+
+    function decode(){
+      if(!camActive) return;
+      if(video.readyState<2){camRAF=requestAnimationFrame(decode);return;}
+
+      var w=video.videoWidth, h=video.videoHeight;
+      if(!w||!h){camRAF=requestAnimationFrame(decode);return;}
+
+      // Sample at lower res for speed
+      var scale=Math.min(1, 640/w);
+      canvas.width=Math.round(w*scale);
+      canvas.height=Math.round(h*scale);
+      ctx.drawImage(video,0,0,canvas.width,canvas.height);
+
+      try{
+        var imageData=ctx.getImageData(0,0,canvas.width,canvas.height);
+        var luminance=new ZXing.RGBLuminanceSource(imageData.data,canvas.width,canvas.height);
+        var bitmap=new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminance));
+        var result=reader.decode(bitmap);
+        if(result){
+          var code=result.getText();
+          var now=Date.now();
+          if(code&&(code!==lastScan||(now-lastScanTime)>2000)){
+            lastScan=code; lastScanTime=now;
+            onFound(code); return;
+          }
+        }
+      }catch(e){
+        // NotFoundException is normal — just means no barcode in frame yet
+      }
+      // Use setTimeout instead of RAF for ZXing — gives it time to breathe
+      setTimeout(decode, 80);
+    }
+    decode();
+  }catch(e){
+    setCamStatus('Scanner error — type barcode manually');
+    console.error('ZXing error:',e);
+  }
+}
+
+function onFound(code){
+  $('cam-found').style.display='flex';
+  $('cam-code').textContent=code;
+  setCamStatus('✔ Found!');
+  if(navigator.vibrate) navigator.vibrate([50,30,50]);
+  setTimeout(function(){
+    stopCamera();
+    $('scan-in').value=code;
+    pickProd(code);
+    setTimeout(function(){
+      $('qty-in').value='';
+      $('qty-in').focus();
+    },200);
+  },400);
+}
+
+function setCamStatus(msg){
+  var el=$('cam-status');
+  if(el) el.textContent=msg;
+}
+
+function stopCamera(){
+  camActive=false;
+  $('cam-btn').textContent='📷';
+  $('cam-overlay').style.display='none';
+  $('cam-found').style.display='none';
+  if(camRAF){cancelAnimationFrame(camRAF);camRAF=null;}
+  if(camStream){camStream.getTracks().forEach(function(t){t.stop();});camStream=null;}
+  var v=$('cam-video');
+  if(v&&v.srcObject){v.srcObject.getTracks().forEach(function(t){t.stop();});v.srcObject=null;}
+  zxingReader=null;
+}
+
+// iOS file input fallback (kept for older iOS)
+function processIOSImage(input){
+  if(!input.files||!input.files[0]) return;
+  var file=input.files[0];
+  $('cam-btn').textContent='⏳';
+  if('BarcodeDetector' in window){
+    var detector=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','qr_code']});
+    createImageBitmap(file).then(function(bitmap){
+      return detector.detect(bitmap);
+    }).then(function(results){
+      $('cam-btn').textContent='📷';
+      if(results&&results.length>0){
+        var code=results[0].rawValue;
+        if(navigator.vibrate) navigator.vibrate(80);
+        $('scan-in').value=code;
+        pickProd(code);
+        $('qty-in').value='';
+        $('qty-in').focus();
+      } else {
+        toast('No barcode found — try again or type manually','warn');
+      }
+    }).catch(function(){
+      $('cam-btn').textContent='📷';
+      toast('Could not read image','warn');
+    });
+  } else {
+    $('cam-btn').textContent='📷';
+    toast('Type barcode manually on this device','warn');
+  }
+}
 
 function toggleCamera(){
   if(camActive) stopCamera();
@@ -1388,6 +1637,104 @@ function stopCamera(){
   if(v&&v.srcObject){v.srcObject.getTracks().forEach(function(t){t.stop();});v.srcObject=null;}
 }
 
+
+// ═══════════════════════════════════════════════════
+//  OFFLINE SYNC SYSTEM
+//  Saves scans to localStorage when offline
+//  Auto-syncs to Supabase when back online
+// ═══════════════════════════════════════════════════
+var PENDING_KEY = 'stp_pending_scans';
+var syncTimer = null;
+var isSyncing = false;
+
+// Get pending scans from localStorage
+function getPending(){
+  try{ return JSON.parse(localStorage.getItem(PENDING_KEY)||'[]'); }
+  catch(e){ return []; }
+}
+
+// Save pending scans to localStorage
+function setPending(scans){
+  try{ localStorage.setItem(PENDING_KEY, JSON.stringify(scans)); }
+  catch(e){ console.error('LocalStorage error:', e); }
+}
+
+// Add a scan to pending queue
+function queueScan(entry){
+  var pending = getPending();
+  // Remove existing entry for same product code
+  pending = pending.filter(function(e){ return e.code !== entry.code; });
+  pending.push(entry);
+  setPending(pending);
+}
+
+// Show sync status
+function showSyncStatus(type, msg){
+  var el = $('saving');
+  var icon = $('sync-icon');
+  var txt = $('sync-txt');
+  el.className = 'show ' + type;
+  txt.textContent = msg;
+  if(type === 'syncing') icon.textContent = '↻';
+  else if(type === 'synced') icon.textContent = '✓';
+  else if(type === 'offline') icon.textContent = '📵';
+  else icon.textContent = '⏳';
+  el.style.display = 'flex';
+  if(type === 'synced'){
+    clearTimeout(window._syncHide);
+    window._syncHide = setTimeout(function(){ el.style.display='none'; }, 3000);
+  }
+}
+
+// Sync all pending scans to Supabase
+async function syncPending(){
+  if(isSyncing) return;
+  var pending = getPending();
+  if(!pending.length) return;
+  if(!navigator.onLine) return;
+
+  isSyncing = true;
+  showSyncStatus('syncing', 'Syncing ' + pending.length + ' scan' + (pending.length>1?'s':'') + '…');
+
+  var failed = [];
+  for(var i=0; i<pending.length; i++){
+    try{
+      await sbUpsert('scans', pending[i]);
+    } catch(e){
+      failed.push(pending[i]);
+    }
+  }
+
+  setPending(failed);
+  isSyncing = false;
+
+  if(failed.length === 0){
+    showSyncStatus('synced', 'All synced ✓');
+  } else {
+    showSyncStatus('offline', failed.length + ' pending');
+  }
+}
+
+// Listen for online/offline events
+window.addEventListener('online', function(){
+  showSyncStatus('syncing', 'Back online — syncing…');
+  setTimeout(syncPending, 500);
+});
+
+window.addEventListener('offline', function(){
+  var pending = getPending();
+  showSyncStatus('offline', 'Offline' + (pending.length ? ' · '+pending.length+' pending' : ''));
+});
+
+// Sync every 30 seconds when online
+function startSyncTimer(){
+  if(syncTimer) clearInterval(syncTimer);
+  syncTimer = setInterval(function(){
+    if(navigator.onLine && getPending().length > 0){
+      syncPending();
+    }
+  }, 30000);
+}
 
 // ═══════════════════════════════════════════════════
 //  PWA INSTALL

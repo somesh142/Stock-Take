@@ -255,10 +255,10 @@ tbody tr:last-child td{border-bottom:none;}
 .mob-tab.on{color:var(--gold);border-bottom-color:var(--gold);background:rgba(240,192,64,0.05);}
 
 /* Mobile panel visibility */
-.mob-panel{display:none;}
-.mob-panel.on{display:flex;flex-direction:column;flex:1;overflow:hidden;}
+.mob-panel{display:none;flex-direction:column;flex:1;overflow:hidden;}
+.mob-panel.on{display:flex;}
 @media(min-width:800px){
-  .mob-panel{display:flex!important;flex-direction:column;flex:1;overflow:hidden;}
+  .mob-panel{display:flex!important;}
   .log-panel{display:flex;}
 }
 .scan-wrap{position:relative;}
@@ -1278,6 +1278,24 @@ function updateUStats(){
   ['u-pr','u-pr2'].forEach(function(id){if($(id))$(id).textContent=pr;});
   ['u-un','u-un2'].forEach(function(id){if($(id))$(id).textContent=un;});
 }
+
+// ── MOBILE TAB SWITCHING ──
+function mobTab(t){
+  ['scan','hist'].forEach(function(n){
+    var panel=$('mob-'+n);
+    var btn=$('tab-'+n+'-btn');
+    if(panel) panel.classList.toggle('on', n===t);
+    if(btn) btn.classList.toggle('on', n===t);
+  });
+  if(t==='hist'){
+    updateUStats();
+    renderSess();
+    renderULog();
+  }
+  if(t==='scan'){
+    setTimeout(function(){ if($('scan-in')) $('scan-in').focus(); }, 100);
+  }
+}
 function renderSess(){var mine=scanLog.filter(function(e){return e.user===curUser;});var list=$('sess-list');if(!mine.length){list.innerHTML='<div style="color:var(--muted);font-family:\'IBM Plex Mono\',monospace;font-size:0.7rem;text-align:center;padding:1rem 0;">No scans yet</div>';return;}list.innerHTML=mine.map(function(e){return'<div class="sess-item"><div><div class="si-name">'+e.name+'</div><div class="si-code">'+e.code+'</div></div><span class="tag t-qty">'+e.qty+'</span></div>';}).join('');}
 
 // ═══════════════════════════════════════════════════
@@ -1339,7 +1357,8 @@ function startCamera(){
   $('cam-found').style.display='none';
   camActive=true;
   $('cam-btn').textContent='🔴';
-  setCamStatus('Starting camera…');
+  var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent);
+  setCamStatus(isIOS?'Starting camera (iOS)…':'Starting camera…');
 
   var constraints={
     video:{
@@ -1424,20 +1443,23 @@ function useZXing(video){
   var tracks = camStream ? camStream.getVideoTracks() : [];
   var deviceId = tracks.length > 0 ? tracks[0].getSettings().deviceId : undefined;
 
+  // Find the video container div
+  var videoContainer = $('cam-video') ? $('cam-video').parentElement : document.getElementById('cam-overlay');
+  
   Quagga.init({
     inputStream:{
       name:'Live',
       type:'LiveStream',
-      target: $('cam-video').parentElement,
+      target: videoContainer,
       constraints:{
-        facingMode:'environment',
-        width:{ideal:1280},
-        height:{ideal:720}
+        facingMode:{ideal:'environment'},
+        width:{min:480,ideal:1280},
+        height:{min:360,ideal:720}
       }
     },
     locator:{patchSize:'medium', halfSample:true},
     numOfWorkers: 0,
-    frequency: 10,
+    frequency: 8,
     decoder:{
       readers:[
         'ean_reader',
@@ -1446,20 +1468,20 @@ function useZXing(video){
         'upc_e_reader',
         'code_128_reader',
         'code_39_reader',
-        'code_93_reader',
-        'i2of5_reader',
-        'codabar_reader'
-      ]
+        'i2of5_reader'
+      ],
+      multiple: false
     },
-    locate:true
+    locate: true
   }, function(err){
     if(err){
       console.error('Quagga init error:', err);
-      setCamStatus('Scanner error — type manually');
+      // Show manual entry option as fallback
+      setCamStatus('Camera started — point at barcode slowly');
       return;
     }
     Quagga.start();
-    setCamStatus('Point camera at barcode');
+    setCamStatus('Hold barcode steady in frame');
   });
 
   // Stop the original stream since Quagga creates its own

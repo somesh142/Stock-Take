@@ -11,6 +11,24 @@
 <link rel="manifest" href="manifest.json">
 <title>StockTake Pro</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script type="module">
+  try {
+    const zbar = await import('https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.9.15/dist/main.js');
+    console.log('zbar exports:', Object.keys(zbar).join(','));
+    if(zbar.ZBarScanner){
+      const scanner = await zbar.ZBarScanner.create();
+      window.zbarScan = async function(imageData){ return await scanner.scanImageData(imageData); };
+      window.zbarReady = true;
+      console.log('zbar ready using ZBarScanner');
+    } else if(zbar.scanImageData){
+      window.zbarScan = zbar.scanImageData;
+      window.zbarReady = true;
+      console.log('zbar ready using scanImageData');
+    } else {
+      console.error('zbar: no usable API', Object.keys(zbar));
+    }
+  } catch(e){ console.error('zbar-wasm error:', e); }
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -23,7 +41,7 @@
   --shadow:rgba(0,0,0,0.5);
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-serif;min-height:100vh;overflow-x:hidden;}
+body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-serif;min-height:100vh;overflow-x:hidden;overflow-y:hidden;}
 body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(240,192,64,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(240,192,64,0.025) 1px,transparent 1px);background-size:60px 60px;pointer-events:none;z-index:0;}
 
 /* ── SETUP ── */
@@ -53,7 +71,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .screen{display:none;min-height:100vh;position:relative;z-index:1;}
 .screen.on{display:flex;flex-direction:column;}
 #s-admin.on,#s-user.on{display:block;}
-#s-entry{align-items:center;justify-content:center;padding:2rem;}
+#s-entry{align-items:center;justify-content:center;padding:2rem;overflow:hidden;}
 
 /* ── ENTRY ── */
 .entry-box{width:100%;max-width:460px;}
@@ -307,8 +325,8 @@ tbody tr:last-child td{border-bottom:none;}
 .cam-btn:active{transform:scale(0.95);}
 
 /* ── TOAST ── */
-#toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--sur2);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:0.76rem;padding:0.85rem 1.25rem;border-left:3px solid var(--green);border-radius:4px;z-index:200;transform:translateX(120%);transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1);max-width:320px;box-shadow:0 8px 40px var(--shadow);}
-#toast.show{transform:translateX(0);}
+#toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--sur2);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:0.76rem;padding:0.85rem 1.25rem;border-left:3px solid var(--green);border-radius:4px;z-index:200;transform:translateX(calc(100% + 2rem));transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1);max-width:320px;box-shadow:0 8px 40px var(--shadow);visibility:hidden;}
+#toast.show{transform:translateX(0);visibility:visible;}
 #toast.t-err{border-left-color:var(--red);}
 #toast.t-warn{border-left-color:var(--gold);}
 
@@ -319,8 +337,7 @@ tbody tr:last-child td{border-bottom:none;}
 #saving.syncing{border-color:rgba(74,144,255,0.3);color:var(--blue);}
 .mini-spin{width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 0.6s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
-/* PWA INSTALL BUTTON — small floating */
-#install-banner{display:none;position:fixed;bottom:1.25rem;right:1.25rem;z-index:300;flex-direction:column;align-items:flex-end;gap:0.4rem;}
+
 #install-banner.show{display:flex;}
 .ib-pill{display:flex;align-items:center;gap:7px;background:var(--surface);border:1.5px solid var(--gold);border-radius:50px;padding:0.45rem 0.9rem 0.45rem 0.6rem;box-shadow:0 4px 20px rgba(240,192,64,0.25);cursor:pointer;transition:all 0.2s;}
 .ib-pill:hover{background:rgba(240,192,64,0.1);box-shadow:0 6px 28px rgba(240,192,64,0.35);}
@@ -417,8 +434,10 @@ create policy "public" on config for all using (true) with check (true);</code>
         <div class="rb-desc">Scan products, enter qty &amp; expiry</div>
       </div>
     </div>
-    <div class="cloud-status"><div class="cs-dot"></div><span id="cs-txt">Connected to Supabase</span></div>
-    <!-- connection fixed -->
+    <div style="display:flex;align-items:center;justify-content:center;gap:7px;margin-top:1.25rem;font-family:'IBM Plex Mono',monospace;font-size:0.62rem;color:var(--muted);">
+      <div style="width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:breathe 2s ease-in-out infinite;flex-shrink:0;"></div>
+      <span id="cs-txt">Connected to Supabase</span>
+    </div>
   </div>
 </div>
 
@@ -459,7 +478,7 @@ create policy "public" on config for all using (true) with check (true);</code>
   <div class="topbar">
     <div class="tb-brand">📦 StockTake <span class="role-chip">Admin</span></div>
     <div class="tb-right">
-      <div class="sync-chip"><div class="sync-dot"></div>Supabase</div>
+      <div class="sync-chip">● Supabase</div>
       <div class="user-chip"><div class="u-dot"></div><span id="admin-lbl">Admin</span></div>
       <button class="tb-btn" onclick="adminLogout()">Logout</button>
     </div>
@@ -634,7 +653,7 @@ create policy "public" on config for all using (true) with check (true);</code>
   <div class="topbar">
     <div class="tb-brand">📦 StockTake <span class="role-chip">Scanner</span></div>
     <div class="tb-right">
-      <div class="sync-chip"><div class="sync-dot"></div>Supabase</div>
+      <div class="sync-chip">● Supabase</div>
       <div class="user-chip"><div class="u-dot"></div><span id="user-lbl">—</span></div>
       <button class="tb-btn" onclick="userLogout()">Switch User</button>
     </div>
@@ -812,17 +831,10 @@ create policy "public" on config for all using (true) with check (true);</code>
   </div>
 </div>
 
-<div id="saving"><span id="sync-icon">⏳</span><span id="sync-txt">Saving…</span></div>
+<div id="saving" style="display:none;"><span id="sync-icon">⏳</span><span id="sync-txt">Saving…</span></div>
 <div id="toast"></div>
 
-<!-- PWA INSTALL BUTTON — small floating pill -->
-<div id="install-banner" style="display:none;">
-  <div class="ib-pill" onclick="installApp()">
-    <span class="ib-pill-icon">⬇</span>
-    <span class="ib-pill-txt">Install App</span>
-  </div>
-  <div class="ib-dismiss-x" onclick="dismissInstall()">✕ dismiss</div>
-</div>
+
 
 <script>
 // ═══════════════════════════════════════════════════
@@ -1030,7 +1042,7 @@ function adminLogin(){
     } else {$('a-err').style.display='block';}
   });
 }
-function adminLogout(){curRole='';go('s-entry');}
+function adminLogout(){curRole='';$('saving').style.display='none';go('s-entry');}
 
 function userLogin(){
   var n=$('u-name').value.trim();
@@ -1319,75 +1331,15 @@ function exportXL(){if(!scanLog.length){toast('No data to export','err');return;
 function clearAllScans(){saving(true);sbDelete('scans','code=neq.null').then(function(){scanLog=[];$('clear-modal').classList.remove('open');refreshDash();toast('All records deleted','warn');}).catch(function(e){toast('Error: '+e.message,'err');}).finally(function(){saving(false);});}
 
 // ═══════════════════════════════════════════════════
-//  CAMERA BARCODE SCANNER
-//  Uses native BarcodeDetector API (Chrome Android)
-//  Falls back to getUserMedia + canvas on other browsers
+//  UNIVERSAL BARCODE SCANNER
+//  Android: Native BarcodeDetector (hardware accelerated)
+//  iOS 14.3+: getUserMedia + zbar-wasm canvas scanning
+//  Fallback: File input with BarcodeDetector on image
 // ═══════════════════════════════════════════════════
-var camActive=false, camStream=null, camRAF=null, lastScan='', lastScanTime=0;
+var camActive=false, camStream=null, camRAF=null;
+var lastScan='', lastScanTime=0;
 
-// ── SMART SCANNER — Android uses live camera, iOS uses file picker ──
-function openScanner(){
-  var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-  var hasBarcodeDetector = 'BarcodeDetector' in window;
-
-  if(!isIOS && hasBarcodeDetector){
-    // Android Chrome — use live camera scanner
-    toggleCamera();
-  } else {
-    // iOS or unsupported — use native camera file picker
-    // On iOS 16+ the camera app has built-in barcode detection
-    $('ios-cam').value = '';
-    $('ios-cam').click();
-    $('scan-hint').textContent = 'Point camera at barcode and take photo';
-  }
-}
-
-function processIOSImage(input){
-  if(!input.files || !input.files[0]) return;
-  var file = input.files[0];
-  $('cam-btn').textContent = '⏳';
-  $('scan-hint').textContent = 'Reading barcode…';
-
-  // Try native BarcodeDetector on image (works on some iOS versions)
-  if('BarcodeDetector' in window){
-    var detector = new BarcodeDetector({
-      formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','qr_code']
-    });
-    createImageBitmap(file).then(function(bitmap){
-      return detector.detect(bitmap);
-    }).then(function(results){
-      $('cam-btn').textContent = '📷';
-      if(results && results.length > 0){
-        var code = results[0].rawValue;
-        if(navigator.vibrate) navigator.vibrate(80);
-        $('scan-in').value = code;
-        pickProd(code);
-        $('qty-in').value = '';
-        $('qty-in').focus();
-        $('scan-hint').textContent = 'Product found — enter qty then tap Record Scan';
-      } else {
-        toast('No barcode detected — try again or type manually','warn');
-        $('scan-hint').textContent = 'Type SKU or barcode → tap Search · 📷 = camera scan';
-      }
-    }).catch(function(){
-      $('cam-btn').textContent = '📷';
-      toast('Could not read image — try again','warn');
-      $('scan-hint').textContent = 'Type SKU or barcode → tap Search · 📷 = camera scan';
-    });
-    return;
-  }
-
-  // Fallback for older iOS — use canvas + ZXing if available
-  var img = new Image();
-  img.onload = function(){
-    $('cam-btn').textContent = '📷';
-    // Can't decode without BarcodeDetector — prompt manual entry
-    toast('Auto-scan not supported on this device — type barcode manually','warn');
-    $('scan-hint').textContent = 'Type SKU or barcode → tap Search · 📷 = camera scan';
-    URL.revokeObjectURL(img.src);
-  };
-  img.src = URL.createObjectURL(file);
-}
+function openScanner(){ toggleCamera(); }
 
 function toggleCamera(){
   if(camActive) stopCamera();
@@ -1396,97 +1348,131 @@ function toggleCamera(){
 
 function startCamera(){
   $('cam-overlay').style.display='flex';
+  $('cam-found').style.display='none';
   camActive=true;
   $('cam-btn').textContent='🔴';
   setCamStatus('Starting camera…');
 
-  var constraints={
-    video:{
-      facingMode:{ideal:'environment'},
-      width:{ideal:1920},
-      height:{ideal:1080}
-    }
-  };
+  // Request back camera at good resolution
+  var constraints={video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}};
 
   navigator.mediaDevices.getUserMedia(constraints)
-    .catch(function(){
-      return navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
-    })
-    .catch(function(){
-      return navigator.mediaDevices.getUserMedia({video:true});
-    })
+    .catch(function(){ return navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}}); })
+    .catch(function(){ return navigator.mediaDevices.getUserMedia({video:true}); })
     .then(function(stream){
       camStream=stream;
       var v=$('cam-video');
       v.srcObject=stream;
+      v.setAttribute('playsinline','');
+      v.setAttribute('autoplay','');
+      v.muted=true;
       v.play().then(function(){
         setCamStatus('Point camera at barcode');
-        startDetection(v);
+        // Pick best detection method
+        if('BarcodeDetector' in window){
+          useNativeDetector(v);
+        } else {
+          // iOS and other browsers — use canvas + zbar-wasm
+          useZbarWasm(v);
+        }
+      }).catch(function(e){
+        setCamStatus('Error: '+e.message);
+        stopCamera();
       });
     })
     .catch(function(e){
-      setCamStatus('Camera error: '+e.message);
-      toast('Camera error: '+e.message,'err');
+      setCamStatus('Camera permission denied');
+      toast('Allow camera access to scan barcodes','err');
       stopCamera();
     });
 }
 
-function startDetection(video){
-  // Use native BarcodeDetector if available (Chrome on Android — very fast)
-  if('BarcodeDetector' in window){
-    var detector=new BarcodeDetector({
-      formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','code_93','itf','qr_code','data_matrix','codabar','code_93']
-    });
-    function detect(){
+// ── Android: Native BarcodeDetector ──
+function useNativeDetector(video){
+  var detector=new BarcodeDetector({
+    formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','code_93','itf','qr_code','data_matrix']
+  });
+  function detect(){
+    if(!camActive) return;
+    if(video.readyState<2){camRAF=requestAnimationFrame(detect);return;}
+    detector.detect(video).then(function(r){
       if(!camActive) return;
-      if(video.readyState<2){camRAF=requestAnimationFrame(detect);return;}
-      detector.detect(video).then(function(results){
+      if(r&&r.length){
+        var code=r[0].rawValue, now=Date.now();
+        if(code&&(code!==lastScan||(now-lastScanTime)>2000)){
+          lastScan=code; lastScanTime=now; onFound(code); return;
+        }
+      }
+      camRAF=requestAnimationFrame(detect);
+    }).catch(function(){camRAF=requestAnimationFrame(detect);});
+  }
+  camRAF=requestAnimationFrame(detect);
+}
+
+// ── iOS Safari: zbar-wasm canvas scanning ──
+function useZbarWasm(video){
+  var canvas=document.createElement('canvas');
+  var ctx=canvas.getContext('2d',{willReadFrequently:true});
+
+  function decode(){
+    if(!camActive) return;
+    if(video.readyState<2||!video.videoWidth){
+      setTimeout(decode,100); return;
+    }
+    // Scale down for performance
+    var scale=Math.min(1,640/video.videoWidth);
+    canvas.width=Math.round(video.videoWidth*scale);
+    canvas.height=Math.round(video.videoHeight*scale);
+    ctx.drawImage(video,0,0,canvas.width,canvas.height);
+    var imageData=ctx.getImageData(0,0,canvas.width,canvas.height);
+
+    // Use zbar-wasm if loaded
+    if(window.zbarReady && window.zbarScan){
+      window.zbarScan(imageData).then(function(results){
         if(!camActive) return;
-        if(results&&results.length>0){
-          var code=results[0].rawValue;
-          var now=Date.now();
-          if(code&&(code!==lastScan||(now-lastScanTime)>2000)){
-            lastScan=code; lastScanTime=now;
-            onFound(code); return;
+        if(results && results.length > 0){
+          var sym = results[0];
+          // Try all possible ways to get the barcode string
+          var code = '';
+          try { code = sym.decode ? sym.decode() : ''; } catch(e){}
+          if(!code) code = sym.data || sym.value || sym.rawValue || '';
+          if(!code && sym.bytes) {
+            try { code = new TextDecoder().decode(sym.bytes); } catch(e){}
+          }
+          var now = Date.now();
+          if(code && (code !== lastScan || (now - lastScanTime) > 2000)){
+            lastScan = code; lastScanTime = now; onFound(code); return;
           }
         }
-        camRAF=requestAnimationFrame(detect);
-      }).catch(function(){
-        camRAF=requestAnimationFrame(detect);
+        setTimeout(decode, 80);
+      }).catch(function(e){
+        console.warn('zbar decode error:', e);
+        setTimeout(decode, 100);
       });
+    } else {
+      setTimeout(decode, 300);
+      if(!window.zbarReady) setCamStatus('Loading scanner…');
     }
-    camRAF=requestAnimationFrame(detect);
-    return;
   }
-
-  // Fallback: show message to use manual entry
-  setCamStatus('Auto-scan not supported — type barcode manually');
-  toast('Use Chrome on Android for camera scanning','warn');
+  // Start after a short delay to let video stabilize
+  setTimeout(decode,500);
 }
 
 function onFound(code){
-  // Show found flash
   $('cam-found').style.display='flex';
   $('cam-code').textContent=code;
-  setCamStatus('✔ Found — enter qty to save');
+  setCamStatus('✔ Found!');
   if(navigator.vibrate) navigator.vibrate([50,30,50]);
   setTimeout(function(){
     stopCamera();
-    $('scan-in').value=code;
+    if($('smart-search')) $('smart-search').value=code;
+    if($('scan-in')) $('scan-in').value=code;
     pickProd(code);
-    // Reset qty so user must enter it manually
-    setTimeout(function(){
-      $('qty-in').value='';
-      $('qty-in').focus();
-      $('qty-in').select();
-    },200);
+    setTimeout(function(){ $('qty-in').value=''; $('qty-in').focus(); },200);
   },400);
 }
 
-function setCamStatus(msg){
-  var el=$('cam-status');
-  if(el) el.textContent=msg;
-}
+function setCamStatus(msg){ var el=$('cam-status'); if(el) el.textContent=msg; }
 
 function stopCamera(){
   camActive=false;
@@ -1497,6 +1483,54 @@ function stopCamera(){
   if(camStream){camStream.getTracks().forEach(function(t){t.stop();});camStream=null;}
   var v=$('cam-video');
   if(v&&v.srcObject){v.srcObject.getTracks().forEach(function(t){t.stop();});v.srcObject=null;}
+}
+
+// iOS file input fallback
+function processIOSImage(input){
+  if(!input.files||!input.files[0]) return;
+  var file=input.files[0];
+  $('cam-btn').textContent='⏳';
+  if('BarcodeDetector' in window){
+    var det=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','qr_code']});
+    createImageBitmap(file).then(function(bmp){ return det.detect(bmp); })
+      .then(function(r){
+        $('cam-btn').textContent='📷';
+        if(r&&r.length){
+          var code=r[0].rawValue;
+          if($('smart-search')) $('smart-search').value=code;
+          pickProd(code);
+          $('qty-in').value=''; $('qty-in').focus();
+        } else { toast('No barcode found — try again','warn'); }
+      }).catch(function(){ $('cam-btn').textContent='📷'; toast('Try again','warn'); });
+    return;
+  }
+  // zbar-wasm fallback for older iOS
+  var img=new Image();
+  img.onload=function(){
+    var cvs=document.createElement('canvas');
+    cvs.width=img.width; cvs.height=img.height;
+    cvs.getContext('2d').drawImage(img,0,0);
+    var id=cvs.getContext('2d').getImageData(0,0,cvs.width,cvs.height);
+    if(window.zbarReady&&window.zbarScanImageData){
+      window.zbarScan(id).then(function(r){
+        $('cam-btn').textContent='📷';
+        if(r&&r.length){
+          var sym=r[0];
+          var code='';
+          try{code=sym.decode?sym.decode():'';}catch(e){}
+          if(!code) code=sym.data||sym.value||sym.rawValue||'';
+          if(!code&&sym.bytes){try{code=new TextDecoder().decode(sym.bytes);}catch(e){}}
+          if(code){ if($('smart-search'))$('smart-search').value=code; pickProd(code); $('qty-in').value=''; $('qty-in').focus(); }
+          else toast('No barcode found — try again','warn');
+        } else toast('No barcode found — try again','warn');
+      });
+    } else {
+      $('cam-btn').textContent='📷';
+      toast('Type barcode manually','warn');
+    }
+    URL.revokeObjectURL(img.src);
+  };
+  img.src=URL.createObjectURL(file);
 }
 
 
@@ -1532,6 +1566,8 @@ function queueScan(entry){
 
 // Show sync status
 function showSyncStatus(type, msg){
+  // Only show sync status when user is logged in as scanner or admin
+  if(!curRole){ return; }
   var el = $('saving');
   var icon = $('sync-icon');
   var txt = $('sync-txt');
@@ -1542,7 +1578,8 @@ function showSyncStatus(type, msg){
   else if(type === 'offline') icon.textContent = '📵';
   else icon.textContent = '⏳';
   el.style.display = 'flex';
-  if(type === 'synced'){
+  // Auto-hide synced and non-critical messages after 3s
+  if(type === 'synced' || type === ''){
     clearTimeout(window._syncHide);
     window._syncHide = setTimeout(function(){ el.style.display='none'; }, 3000);
   }
@@ -1596,48 +1633,6 @@ function startSyncTimer(){
       syncPending();
     }
   }, 30000);
-}
-
-// ═══════════════════════════════════════════════════
-//  PWA INSTALL
-// ═══════════════════════════════════════════════════
-var deferredInstall=null;
-
-window.addEventListener('beforeinstallprompt',function(e){
-  e.preventDefault();
-  deferredInstall=e;
-  if(!localStorage.getItem('stp_install_dismissed')){
-    setTimeout(function(){ $('install-banner').classList.add('show'); }, 3000);
-  }
-});
-
-window.addEventListener('appinstalled',function(){
-  $('install-banner').classList.remove('show');
-  deferredInstall=null;
-  toast('App installed! ✓');
-});
-
-function installApp(){
-  if(deferredInstall){
-    deferredInstall.prompt();
-    deferredInstall.userChoice.then(function(r){
-      if(r.outcome==='accepted') $('install-banner').classList.remove('show');
-      deferredInstall=null;
-    });
-  } else {
-    // iOS instructions
-    toast('On iPhone: tap Share → Add to Home Screen','warn');
-  }
-}
-
-function dismissInstall(){
-  $('install-banner').classList.remove('show');
-  localStorage.setItem('stp_install_dismissed','1');
-}
-
-// Register service worker for offline support
-if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('sw.js').catch(function(){});
 }
 
 // ═══════════════════════════════════════════════════

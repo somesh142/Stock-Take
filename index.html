@@ -671,29 +671,26 @@ create policy "public" on config for all using (true) with check (true);</code>
       <div class="scan-panel">
         <div class="scan-panel-body">
 
-          <!-- Barcode + Camera + Search -->
+          <!-- Single Smart Search — SKU, barcode OR product name -->
           <div>
-            <div class="sp-lbl">Scan Barcode</div>
+            <div class="sp-lbl">Search Product</div>
             <div style="display:flex;gap:0.5rem;align-items:stretch;">
-              <!-- Camera button - shows live scanner on Android, file picker on iOS -->
               <button class="cam-btn" id="cam-btn" onclick="openScanner()" title="Scan with camera">📷</button>
-              <!-- Hidden iOS file input -->
               <input type="file" id="ios-cam" accept="image/*" capture="environment" style="display:none;" onchange="processIOSImage(this)"/>
-              <div class="scan-wrap" style="flex:1;">
-                <input class="inp" type="text" id="scan-in" placeholder="Type SKU or barcode…" autocomplete="off" style="font-size:0.95rem;font-weight:600;border-width:2px;padding:0.7rem 0.9rem;"/>
+              <div class="isearch-wrap" style="flex:1;position:relative;">
+                <input class="inp" type="text" id="smart-search"
+                  placeholder="SKU, barcode or product name…"
+                  autocomplete="off"
+                  oninput="smartSearch(this.value)"
+                  onkeydown="if(event.key==='Enter'){event.preventDefault();smartSearchEnter();}"
+                  style="font-size:0.88rem;font-weight:600;border-width:2px;width:100%;"/>
+                <input type="hidden" id="scan-in"/>
+                <input type="hidden" id="inv-search"/>
+                <div class="isearch-drop" id="inv-drop" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1.5px solid var(--bor2);border-top:none;max-height:220px;overflow-y:auto;z-index:20;border-radius:0 0 4px 4px;box-shadow:0 8px 24px rgba(0,0,0,0.4);"></div>
               </div>
-              <button onclick="doBarcode()" style="background:var(--green);color:#04150d;border:none;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:0.85rem;padding:0 1.1rem;border-radius:3px;cursor:pointer;white-space:nowrap;letter-spacing:0.05em;">🔍 Search</button>
+              <button onclick="smartSearchEnter()" style="background:var(--green);color:#04150d;border:none;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:0.85rem;padding:0 1rem;border-radius:3px;cursor:pointer;white-space:nowrap;">🔍</button>
             </div>
-            <div style="font-family:'IBM Plex Mono',monospace;font-size:0.62rem;color:var(--muted);margin-top:0.35rem;" id="scan-hint">Type SKU or barcode → tap Search · 📷 = camera scan</div>
-          </div>
-
-          <!-- Name Search -->
-          <div>
-            <div class="sp-lbl">Search by Name</div>
-            <div class="isearch-wrap">
-              <input class="inp" type="text" id="inv-search" placeholder="Type product name…" oninput="invSearch()" autocomplete="off"/>
-              <div class="isearch-drop" id="inv-drop"></div>
-            </div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:0.6rem;color:var(--muted);margin-top:0.35rem;" id="scan-hint">Type SKU · barcode · or product name — or use 📷 camera</div>
           </div>
 
           <!-- Product Card -->
@@ -1072,9 +1069,9 @@ document.addEventListener('keydown',function(e){
   if($('s-admin-login').classList.contains('on')) adminLogin();
   if($('s-user-login').classList.contains('on'))  userLogin();
   if($('s-user').classList.contains('on')){
-    if(document.activeElement.id==='scan-in'){
+    if(document.activeElement.id==='scan-in'||document.activeElement.id==='smart-search'){
       e.preventDefault();
-      doBarcode();
+      smartSearchEnter();
     }
     // NOTE: Enter on qty-in does NOT record — user must tap Record Scan button
   }
@@ -1161,6 +1158,71 @@ function selectProduct(code){
   pickProd(code);
   setTimeout(function(){ $('qty-in').value=''; $('qty-in').focus(); },100);
 }
+
+function smartSearch(val){
+  var q=val.trim().toLowerCase();
+  var drop=$('inv-drop');
+  if(!q){ drop.style.display='none'; return; }
+  var hits=inventory.filter(function(p){
+    return p.code.toLowerCase().includes(q)||
+           p.name.toLowerCase().includes(q)||
+           (p.bc1&&p.bc1.toLowerCase().includes(q))||
+           (p.bc2&&p.bc2.toLowerCase().includes(q))||
+           (p.bc3&&p.bc3.toLowerCase().includes(q))||
+           (p.bc4&&p.bc4.toLowerCase().includes(q));
+  }).slice(0,12);
+  if(!hits.length){
+    drop.innerHTML='<div style="padding:0.75rem 1rem;color:var(--muted);font-size:0.72rem;font-family:monospace;">No results for &quot;'+val+'&quot;</div>';
+    drop.style.display='block';
+    return;
+  }
+  var html='';
+  hits.forEach(function(p){
+    var matchInfo=p.code;
+    if(!p.code.toLowerCase().includes(q)){
+      if(p.bc1&&p.bc1.toLowerCase().includes(q)) matchInfo='BC: '+p.bc1;
+      else if(p.bc2&&p.bc2.toLowerCase().includes(q)) matchInfo='BC: '+p.bc2;
+      else if(p.bc3&&p.bc3.toLowerCase().includes(q)) matchInfo='BC: '+p.bc3;
+      else if(p.bc4&&p.bc4.toLowerCase().includes(q)) matchInfo='BC: '+p.bc4;
+    }
+    html+='<div class="isearch-item" onclick="selectProduct(\'' +p.code+ '\')" style="display:flex;justify-content:space-between;align-items:center;padding:0.6rem 0.85rem;border-bottom:1px solid var(--border);cursor:pointer;">';
+    html+='<div><div style="font-size:0.82rem;font-weight:600;color:var(--text);">'+p.name+'</div>';
+    html+='<div style="font-size:0.65rem;color:var(--muted);">'+matchInfo+(p.category?' · '+p.category:'')+'</div></div>';
+    html+='<div style="color:var(--gold);padding-left:8px;font-size:1rem;">→</div>';
+    html+='</div>';
+  });
+  drop.innerHTML=html;
+  drop.style.display='block';
+}
+
+function smartSearchEnter(){
+  var v=$('smart-search')?$('smart-search').value.trim():'';
+  if(!v) return;
+  $('inv-drop').style.display='none';
+  // Try exact match first
+  pickProd(v);
+  if(curProd){
+    $('qty-in').value=''; $('qty-in').focus();
+    toast('Product found — enter qty then tap Record Scan');
+  } else {
+    // Try partial name/code match
+    var q=v.toLowerCase();
+    var hit=inventory.find(function(p){
+      return p.name.toLowerCase().includes(q)||p.code.toLowerCase().includes(q)||
+             (p.bc1&&p.bc1.toLowerCase().includes(q));
+    });
+    if(hit){
+      if($('smart-search')) $('smart-search').value=hit.name;
+      pickProd(hit.code);
+      $('qty-in').value=''; $('qty-in').focus();
+      toast('Product found — enter qty then tap Record Scan');
+    } else {
+      toast('"'+v+'" not found','err');
+    }
+  }
+}
+
+
 function doBarcode(){
   var v=$('scan-in').value.trim();
   if(!v){ toast('Enter a barcode or SKU first','warn'); return; }
@@ -1197,14 +1259,7 @@ function pickProd(code){
   $('inv-drop').style.display='none';$('inv-search').value='';
 }
 
-function invSearch(){
-  var q=$('inv-search').value.trim().toLowerCase(),drop=$('inv-drop');
-  if(!q){drop.style.display='none';return;}
-  var hits=inventory.filter(function(p){return p.name.toLowerCase().includes(q)||p.code.toLowerCase().includes(q);}).slice(0,8);
-  if(!hits.length){drop.style.display='none';return;}
-  drop.innerHTML=hits.map(function(p){return'<div class="isearch-item" onclick="pickProd(\''+p.code+'\');$(\'scan-in\').value=\''+p.code+'\'"><span>'+p.name+'</span><span class="is-code">'+p.code+'</span></div>';}).join('');
-  drop.style.display='block';
-}
+function invSearch(){ if($('smart-search')) smartSearch($('smart-search').value); }
 
 function stepQ(d){$('qty-in').value=Math.max(0,(parseInt($('qty-in').value)||0)+d);}
 
@@ -1467,6 +1522,7 @@ function onFound(code){
     stopCamera();
     if($('smart-search')) $('smart-search').value=code;
     if($('scan-in')) $('scan-in').value=code;
+    $('inv-drop').style.display='none';
     pickProd(code);
     setTimeout(function(){ $('qty-in').value=''; $('qty-in').focus(); },200);
   },400);
@@ -1639,6 +1695,13 @@ function startSyncTimer(){
 //  BOOT
 // ═══════════════════════════════════════════════════
 startApp();
+</script>
+<script>
+document.addEventListener('click',function(e){
+  var drop=$('inv-drop');
+  var wrap=document.querySelector('.isearch-wrap');
+  if(drop&&wrap&&!wrap.contains(e.target)){drop.style.display='none';}
+});
 </script>
 </body>
 </html>

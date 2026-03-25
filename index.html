@@ -559,6 +559,7 @@ create policy "public" on config for all using (true) with check (true);</code>
           </div>
           <div class="dt-scroll"><table><thead><tr><th>Code</th><th>Product</th><th>Category</th><th>Expected</th><th>Counted</th><th>Diff</th><th>Progress</th><th>By</th></tr></thead><tbody id="prod-tb"></tbody></table></div>
           <div class="empty-row" id="prod-empty"><div class="ei">📦</div>No inventory loaded</div>
+          <div id="prod-pager"></div>
         </div>
       </div>
 
@@ -604,6 +605,7 @@ create policy "public" on config for all using (true) with check (true);</code>
               <div><div class="cmap-lbl">Barcode 3</div><select class="inp" id="m-bc3"><option value="">(none)</option></select></div>
               <div><div class="cmap-lbl">Barcode 4</div><select class="inp" id="m-bc4"><option value="">(none)</option></select></div>
               <div><div class="cmap-lbl">Purchase Tax Rule</div><select class="inp" id="m-tax"><option value="">(none)</option></select></div>
+              <div><div class="cmap-lbl">Cost Price</div><select class="inp" id="m-cost"><option value="">(none)</option></select></div>
             </div>
             <button class="btn btn-gold btn-sm" onclick="saveInventory()">✔ Save to Supabase</button>
           </div>
@@ -1017,7 +1019,8 @@ function loadInventory(){window._invLoading=true;
         inventory=all.map(function(r){return{
           code:String(r.code||''),name:String(r.name||''),category:String(r.category||''),
           expected:Number(r.expected)||0,bc1:String(r.bc1||''),bc2:String(r.bc2||''),
-          bc3:String(r.bc3||''),bc4:String(r.bc4||''),tax:String(r.tax||'')
+          bc3:String(r.bc3||''),bc4:String(r.bc4||''),tax:String(r.tax||''),
+          cost:Number(r.cost)||0
         };});
         window._invLoading=false;
         showInvInfo();
@@ -1095,7 +1098,7 @@ function handleFile(file){
 }
 
 function buildColMap(){
-  var defs={'m-code':['product code','sku','item code','code'],'m-name':['product name','name','description'],'m-cat':['category','cat','group','dept'],'m-qty':['expected qty','expected','qty','quantity'],'m-bc1':['barcode 1','barcode1','ean','upc','barcode'],'m-bc2':['barcode 2','barcode2'],'m-bc3':['barcode 3','barcode3'],'m-bc4':['barcode 4','barcode4'],'m-tax':['purchase tax','tax rule','tax','gst']};
+  var defs={'m-code':['product code','sku','item code','code'],'m-name':['product name','name','description'],'m-cat':['category','cat','group','dept'],'m-qty':['expected qty','expected','qty','quantity'],'m-bc1':['barcode 1','barcode1','ean','upc','barcode'],'m-bc2':['barcode 2','barcode2'],'m-bc3':['barcode 3','barcode3'],'m-bc4':['barcode 4','barcode4'],'m-tax':['purchase tax','tax rule','tax','gst'],'m-cost':['average cost','cost price','cost','avgcost','averagecost']};
   Object.keys(defs).forEach(function(id){
     var sel=$(id),req=(id==='m-code'||id==='m-name');
     sel.innerHTML=req?'':'<option value="">(none)</option>';
@@ -1110,7 +1113,8 @@ function saveInventory(){
   var ci=gi('m-code'),ni=gi('m-name'),cai=gi('m-cat'),qi=gi('m-qty');
   var b1=gi('m-bc1'),b2=gi('m-bc2'),b3=gi('m-bc3'),b4=gi('m-bc4'),ti=gi('m-tax');
   if(ci===null||ni===null){toast('Map Code & Name first','err');return;}
-  var parsed=rawR.map(function(r){return{code:String(r[ci]||'').trim(),name:String(r[ni]||'').trim(),category:cai!==null?String(r[cai]||'').trim():'',expected:qi!==null?parseFloat(r[qi])||0:0,bc1:b1!==null?String(r[b1]||'').trim():'',bc2:b2!==null?String(r[b2]||'').trim():'',bc3:b3!==null?String(r[b3]||'').trim():'',bc4:b4!==null?String(r[b4]||'').trim():'',tax:ti!==null?String(r[ti]||'').trim():''};}).filter(function(p){return p.code&&p.name;});
+  var coi=gi('m-cost');
+  var parsed=rawR.map(function(r){return{code:String(r[ci]||'').trim(),name:String(r[ni]||'').trim(),category:cai!==null?String(r[cai]||'').trim():'',expected:qi!==null?parseFloat(r[qi])||0:0,bc1:b1!==null?String(r[b1]||'').trim():'',bc2:b2!==null?String(r[b2]||'').trim():'',bc3:b3!==null?String(r[b3]||'').trim():'',bc4:b4!==null?String(r[b4]||'').trim():'',tax:ti!==null?String(r[ti]||'').trim():'',cost:coi!==null?parseFloat(r[coi])||0:0};}).filter(function(p){return p.code&&p.name;});
   if(!parsed.length){toast('No valid rows','err');return;}
   saving(true);
   // Clear then insert in chunks of 200
@@ -1249,7 +1253,7 @@ function pickProd(code){
     curProd=p;
     var bcs=[p.bc1,p.bc2,p.bc3,p.bc4].filter(Boolean);
     card.className='prod-card found';
-    card.innerHTML='<div class="pc-code">'+p.code+'</div><div class="pc-name">'+p.name+'</div><div class="pc-meta">'+(p.category?'<span>📁 '+p.category+'</span>':'')+(p.expected?'<span>📊 Exp: '+p.expected+'</span>':'')+(p.tax?'<span>🧾 '+p.tax+'</span>':'')+(bcs.length?'<span>🔲 '+bcs.join(' · ')+'</span>':'')+'</div>';
+    card.innerHTML='<div class="pc-code">'+p.code+'</div><div class="pc-name">'+p.name+'</div><div class="pc-meta">'+(p.category?'<span>📁 '+p.category+'</span>':'')+(p.expected?'<span>📊 Exp: '+p.expected+'</span>':'')+(p.cost?'<span>💰 $'+p.cost.toFixed(2)+'</span>':'')+(p.tax?'<span>🧾 '+p.tax+'</span>':'')+(bcs.length?'<span>🔲 '+bcs.join(' · ')+'</span>':'')+'</div>';
     btn.disabled=false;$('qty-in').value='';
   } else {
     curProd=null;card.className='prod-card nope';
@@ -1270,7 +1274,7 @@ function recordScan(){
   var exRaw=$('exp-in').value;
   var expiry=exRaw?new Date(exRaw).toLocaleDateString('en-AU'):'';
   var now=new Date();
-  var entry={timestamp:now.getTime(),date:now.toLocaleDateString('en-AU'),time:now.toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',second:'2-digit'}),code:curProd.code,name:curProd.name,category:curProd.category||'',expected:curProd.expected||0,bc1:curProd.bc1||'',bc2:curProd.bc2||'',bc3:curProd.bc3||'',bc4:curProd.bc4||'',tax:curProd.tax||'',expiry:expiry,qty:qty,user:curUser};
+  var entry={timestamp:now.getTime(),date:now.toLocaleDateString('en-AU'),time:now.toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',second:'2-digit'}),code:curProd.code,name:curProd.name,category:curProd.category||'',expected:curProd.expected||0,bc1:curProd.bc1||'',bc2:curProd.bc2||'',bc3:curProd.bc3||'',bc4:curProd.bc4||'',tax:curProd.tax||'',expiry:expiry,qty:qty,cost:curProd.cost||0,user:curUser};
   var existing=scanLog.find(function(e){return e.code===entry.code;});
   if(existing){
     pendingEntry={entry:entry,ex:existing};
@@ -1301,7 +1305,7 @@ function commitScan(entry){
 
   var row={code:entry.code,name:entry.name,category:entry.category,expected:entry.expected,
     bc1:entry.bc1,bc2:entry.bc2,bc3:entry.bc3,bc4:entry.bc4,tax:entry.tax,
-    expiry:entry.expiry,qty:entry.qty,'user':entry.user,
+    expiry:entry.expiry,qty:entry.qty,cost:entry.cost||0,'user':entry.user,
     scan_date:entry.date,scan_time:entry.time,timestamp:entry.timestamp};
 
   // Always queue locally first — guarantees no data loss
@@ -1363,8 +1367,61 @@ function refreshDash(){var active=document.querySelector('.a-tab.on');if(!active
 
 function drawOv(){$('ov-total').textContent=scanLog.length;$('ov-prods').textContent=new Set(scanLog.map(function(e){return e.code;})).size;$('ov-units').textContent=scanLog.reduce(function(s,e){return s+(e.qty||0);},0);$('ov-users').textContent=new Set(scanLog.map(function(e){return e.user;})).size;$('ov-inv').textContent=inventory.length;$('ov-alerts').textContent=countAlerts();var cov=inventory.length?Math.round(new Set(scanLog.map(function(e){return e.code;})).size/inventory.length*100):0;$('ov-cov').textContent=cov+'%';$('ov-sub').textContent='Updated '+new Date().toLocaleTimeString('en-AU')+' · Auto-polls every 15s';var recent=scanLog.slice(0,12),tb=$('recent-tb');if(!recent.length){tb.innerHTML='';$('recent-empty').style.display='block';return;}$('recent-empty').style.display='none';tb.innerHTML=recent.map(function(e){return'<tr><td style="color:var(--muted)">'+e.date+' '+e.time+'</td><td class="td-name">'+e.name+' <span style="color:var(--muted);font-size:0.68rem;">('+e.code+')</span></td><td><span class="tag t-qty">'+e.qty+'</span></td><td>'+fmtExp(e.expiry)+'</td><td><span class="tag t-u">'+e.user+'</span></td></tr>';}).join('');}
 function drawUs(){var users=[...new Set(scanLog.map(function(e){return e.user;}))];var tb=$('users-tb');if(!users.length){tb.innerHTML='';$('users-empty').style.display='block';return;}$('users-empty').style.display='none';var now=Date.now();tb.innerHTML=users.map(function(u){var us=scanLog.filter(function(e){return e.user===u;});var qty=us.reduce(function(s,e){return s+(e.qty||0);},0);var last=us[0],active=last&&(now-last.timestamp)<7200000;return'<tr><td class="td-name">'+u+'</td><td>'+us.length+'</td><td><span class="tag t-qty">'+qty+'</span></td><td>'+new Set(us.map(function(e){return e.code;})).size+'</td><td style="color:var(--muted)">'+(last?last.date+' '+last.time:'—')+'</td><td>'+(active?'<span class="tag t-ok">● Active</span>':'<span class="tag" style="background:rgba(90,90,128,0.12);color:var(--muted);border:1px solid var(--border);">Idle</span>')+'</td></tr>';}).join('');}
-function drawPr(){var tb=$('prod-tb');if(!inventory.length){tb.innerHTML='';$('prod-empty').style.display='block';return;}$('prod-empty').style.display='none';var cnt={},by={};scanLog.forEach(function(e){cnt[e.code]=(cnt[e.code]||0)+(e.qty||0);if(!by[e.code])by[e.code]=new Set();by[e.code].add(e.user);});var rows=inventory.map(function(p){var c=cnt[p.code]||0,exp=p.expected||0,diff=exp?c-exp:null,pct=exp?Math.min(Math.round(c/exp*100),100):(c>0?100:0);return{p:p,c:c,exp:exp,diff:diff,pct:pct,users:by[p.code]?[...by[p.code]].join(', '):'—'};});if(prodFilter==='done')rows=rows.filter(function(r){return r.c>0;});if(prodFilter==='pending')rows=rows.filter(function(r){return r.c===0;});if(!rows.length){tb.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:2rem;font-family:\'IBM Plex Mono\',monospace;font-size:0.75rem;">No products match filter</td></tr>';return;}tb.innerHTML=rows.map(function(r){var bc=r.pct>=100?'full':r.pct>0?'':'zero';var dt=r.diff===null?'<span style="color:var(--muted)">—</span>':r.diff===0?'<span class="tag t-ok">✓ 0</span>':r.diff>0?'<span class="tag t-amb">+'+r.diff+'</span>':'<span class="tag t-bad">'+r.diff+'</span>';return'<tr><td style="color:var(--gold);font-weight:600;">'+r.p.code+'</td><td class="td-name">'+r.p.name+'</td><td style="color:var(--muted)">'+(r.p.category||'—')+'</td><td>'+(r.exp||'—')+'</td><td><span class="tag t-qty">'+r.c+'</span></td><td>'+dt+'</td><td style="min-width:110px;"><div style="font-family:\'IBM Plex Mono\',monospace;font-size:0.65rem;color:var(--muted);">'+r.pct+'%</div><div class="prog"><div class="prog-bar '+bc+'" style="width:'+r.pct+'%"></div></div></td><td style="color:var(--muted);font-size:0.7rem;">'+r.users+'</td></tr>';}).join('');}
-function pf(f){prodFilter=f;drawPr();}
+function drawPr(){
+  var tb=$('prod-tb');
+  if(!inventory.length){tb.innerHTML='';$('prod-empty').style.display='block';return;}
+  $('prod-empty').style.display='none';
+
+  var cnt={},by={};
+  scanLog.forEach(function(e){
+    cnt[e.code]=(cnt[e.code]||0)+(e.qty||0);
+    if(!by[e.code])by[e.code]=new Set();
+    by[e.code].add(e.user);
+  });
+
+  var rows=inventory.map(function(p){
+    var c=cnt[p.code]||0,exp=p.expected||0,diff=exp?c-exp:null,pct=exp?Math.min(Math.round(c/exp*100),100):(c>0?100:0);
+    return{p:p,c:c,exp:exp,diff:diff,pct:pct,users:by[p.code]?[...by[p.code]].join(', '):'—'};
+  });
+
+  if(prodFilter==='done') rows=rows.filter(function(r){return r.c>0;});
+  if(prodFilter==='pending') rows=rows.filter(function(r){return r.c===0;});
+
+  // Paginate — show 100 at a time
+  var PAGE=100;
+  var page=window._prodPage||0;
+  var total=rows.length;
+  var start=page*PAGE;
+  var pageRows=rows.slice(start,start+PAGE);
+
+  if(!pageRows.length){
+    tb.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:2rem;font-family:'IBM Plex Mono',monospace;font-size:0.75rem;">No products match filter</td></tr>';
+    return;
+  }
+
+  tb.innerHTML=pageRows.map(function(r){
+    var bc=r.pct>=100?'full':r.pct>0?'':'zero';
+    var dt=r.diff===null?'<span style="color:var(--muted)">—</span>':r.diff===0?'<span class="tag t-ok">✓ 0</span>':r.diff>0?'<span class="tag t-amb">+'+r.diff+'</span>':'<span class="tag t-bad">'+r.diff+'</span>';
+    return'<tr><td style="color:var(--gold);font-weight:600;">'+r.p.code+'</td><td class="td-name">'+r.p.name+'</td><td style="color:var(--muted)">'+(r.p.category||'—')+'</td><td>'+(r.exp||'—')+'</td><td><span class="tag t-qty">'+r.c+'</span></td><td>'+dt+'</td><td style="min-width:110px;"><div style="font-family:'IBM Plex Mono',monospace;font-size:0.65rem;color:var(--muted);">'+r.pct+'%</div><div class="prog"><div class="prog-bar '+bc+'" style="width:'+r.pct+'%"></div></div></td><td style="color:var(--muted);font-size:0.7rem;">'+r.users+'</td></tr>';
+  }).join('');
+
+  // Pagination controls
+  var pages=Math.ceil(total/PAGE);
+  var pager=$('prod-pager');
+  if(pager){
+    pager.innerHTML='';
+    if(pages>1){
+      pager.innerHTML='<div style="display:flex;align-items:center;gap:0.5rem;padding:0.75rem 1rem;border-top:1px solid var(--border);font-family:'IBM Plex Mono',monospace;font-size:0.7rem;color:var(--muted);">'
+        +'<span>Showing '+(start+1)+'-'+Math.min(start+PAGE,total)+' of '+total+'</span>'
+        +'<div style="flex:1;"></div>'
+        +(page>0?'<button onclick="window._prodPage='+(page-1)+';drawPr();" style="background:var(--sur2);border:1px solid var(--bor2);color:var(--text);padding:0.3rem 0.75rem;cursor:pointer;border-radius:3px;font-family:'IBM Plex Mono',monospace;font-size:0.7rem;">← Prev</button>':'')
+        +(page<pages-1?'<button onclick="window._prodPage='+(page+1)+';drawPr();" style="background:var(--gold);border:none;color:#150e00;padding:0.3rem 0.75rem;cursor:pointer;border-radius:3px;font-family:'IBM Plex Mono',monospace;font-size:0.7rem;font-weight:700;">Next →</button>':'')
+        +'</div>';
+    }
+  }
+}
+
+function pf(f){prodFilter=f;window._prodPage=0;drawPr();}
 function drawEx(){var today=new Date();today.setHours(0,0,0,0);var expired=[],soon=[];scanLog.forEach(function(e){if(!e.expiry)return;var p=String(e.expiry).split('/');if(p.length!==3)return;var d=new Date(p[2]+'-'+p[1]+'-'+p[0]);var diff=Math.floor((d-today)/86400000);if(diff<0)expired.push(Object.assign({},e,{diff:diff}));else if(diff<=30)soon.push(Object.assign({},e,{diff:diff}));});var html='';if(!expired.length&&!soon.length){html='<div class="empty-row"><div class="ei">✅</div>No expiry alerts</div>';}if(expired.length){html+='<div class="exp-sec-title red">🔴 Expired ('+expired.length+')</div>';html+=expired.map(function(e){return'<div class="alert-item a-red"><span style="font-size:1.1rem;">🔴</span><div class="a-txt"><strong>'+e.name+'</strong> ('+e.code+')<small>Expired: '+e.expiry+' · By '+e.user+' · Qty: '+e.qty+'</small></div><span class="tag t-bad">EXPIRED</span></div>';}).join('');}if(soon.length){html+='<div class="exp-sec-title amb">🟡 Expiring Within 30 Days ('+soon.length+')</div>';html+=soon.map(function(e){return'<div class="alert-item a-amb"><span style="font-size:1.1rem;">🟡</span><div class="a-txt"><strong>'+e.name+'</strong> ('+e.code+')<small>Expires: '+e.expiry+' · In '+e.diff+' day'+(e.diff!==1?'s':'')+' · By '+e.user+' · Qty: '+e.qty+'</small></div><span class="tag t-amb">'+e.diff+'d</span></div>';}).join('');}$('exp-body').innerHTML=html;}
 function countAlerts(){var today=new Date();today.setHours(0,0,0,0);return scanLog.filter(function(e){if(!e.expiry)return false;var p=String(e.expiry).split('/');if(p.length!==3)return false;var d=new Date(p[2]+'-'+p[1]+'-'+p[0]);return Math.floor((d-today)/86400000)<=30;}).length;}
 function drawLog(){var users=[...new Set(scanLog.map(function(e){return e.user;}))];var bar=$('log-filters');bar.innerHTML='<span class="tag t-ok" style="cursor:pointer;opacity:'+(logFilter==='all'?1:0.45)+'" onclick="setLF(\'all\')">All Users</span>';users.forEach(function(u){bar.innerHTML+='<span class="tag t-u" style="cursor:pointer;opacity:'+(logFilter===u?1:0.45)+'" onclick="setLF(\''+u+'\')">'+u+'</span>';});var rows=logFilter==='all'?scanLog:scanLog.filter(function(e){return e.user===logFilter;});var tb=$('log-tb');if(!rows.length){tb.innerHTML='';$('log-empty').style.display='block';return;}$('log-empty').style.display='none';tb.innerHTML=rows.map(function(e,i){return'<tr><td style="color:var(--muted)">'+(rows.length-i)+'</td><td>'+e.date+' <span style="color:var(--muted)">'+e.time+'</span></td><td style="color:var(--gold);font-weight:600;">'+e.code+'</td><td class="td-name">'+e.name+'</td><td style="color:var(--muted)">'+(e.category||'—')+'</td><td style="color:var(--muted)">'+(e.bc1||'—')+'</td><td style="color:var(--muted)">'+(e.bc2||'—')+'</td><td style="color:var(--muted)">'+(e.bc3||'—')+'</td><td style="color:var(--muted)">'+(e.bc4||'—')+'</td><td style="color:var(--muted)">'+(e.tax||'—')+'</td><td>'+fmtExp(e.expiry)+'</td><td><span class="tag t-qty">'+e.qty+'</span></td><td><span class="tag t-u">'+e.user+'</span></td></tr>';}).join('');}
@@ -1378,7 +1435,7 @@ function tab(name,el){document.querySelectorAll('.a-tab').forEach(function(t){t.
 // ═══════════════════════════════════════════════════
 //  EXPORT
 // ═══════════════════════════════════════════════════
-function exportXL(){if(!scanLog.length){toast('No data to export','err');return;}var wb=XLSX.utils.book_new();var s1=[['Product Code','Product Name','Category','Barcode 1','Barcode 2','Barcode 3','Barcode 4','Tax Rule','Expiry Date','Expected Qty','Total Counted','Difference','Last Scanned By','Date','Time']];scanLog.forEach(function(e){s1.push([e.code,e.name,e.category||'',e.bc1||'',e.bc2||'',e.bc3||'',e.bc4||'',e.tax||'',e.expiry||'',e.expected||'',e.qty,e.expected?(e.qty-e.expected):'',e.user,e.date,e.time]);});var uMap={};scanLog.forEach(function(e){if(!uMap[e.user])uMap[e.user]={n:0,qty:0,p:new Set()};uMap[e.user].n++;uMap[e.user].qty+=e.qty||0;uMap[e.user].p.add(e.code);});var s2=[['User','Scans','Total Units','Unique Products']];Object.keys(uMap).forEach(function(u){s2.push([u,uMap[u].n,uMap[u].qty,uMap[u].p.size]);});XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(s1),'Stock Take Results');XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(s2),'User Summary');XLSX.writeFile(wb,'stocktake_'+new Date().toISOString().slice(0,10)+'.xlsx');toast('Exported ✓');}
+function exportXL(){if(!scanLog.length){toast('No data to export','err');return;}var wb=XLSX.utils.book_new();var s1=[['Product Code','Product Name','Category','Barcode 1','Barcode 2','Barcode 3','Barcode 4','Tax Rule','Cost Price','Expiry Date','Expected Qty','Total Counted','Difference','Total Cost Value','Last Scanned By','Date','Time']];scanLog.forEach(function(e){var tv=(e.cost||0)*(e.qty||0);s1.push([e.code,e.name,e.category||'',e.bc1||'',e.bc2||'',e.bc3||'',e.bc4||'',e.tax||'',e.cost||'',e.expiry||'',e.expected||'',e.qty,e.expected?(e.qty-e.expected):'',tv?'$'+tv.toFixed(2):'',e.user,e.date,e.time]);});var uMap={};scanLog.forEach(function(e){if(!uMap[e.user])uMap[e.user]={n:0,qty:0,p:new Set()};uMap[e.user].n++;uMap[e.user].qty+=e.qty||0;uMap[e.user].p.add(e.code);});var s2=[['User','Scans','Total Units','Unique Products']];Object.keys(uMap).forEach(function(u){s2.push([u,uMap[u].n,uMap[u].qty,uMap[u].p.size]);});XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(s1),'Stock Take Results');XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(s2),'User Summary');XLSX.writeFile(wb,'stocktake_'+new Date().toISOString().slice(0,10)+'.xlsx');toast('Exported ✓');}
 
 // ═══════════════════════════════════════════════════
 //  CLEAR

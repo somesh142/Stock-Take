@@ -292,7 +292,7 @@ tbody tr:last-child td{border-bottom:none;}
 .qty-inp{flex:1;text-align:center;font-size:2rem;font-weight:700;font-family:'Bebas Neue',sans-serif;letter-spacing:0.05em;border-width:2px;}
 .isearch-wrap{position:relative;}
 .isearch-drop{display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1.5px solid var(--bor2);border-top:none;max-height:190px;overflow-y:auto;z-index:20;border-radius:0 0 4px 4px;}
-.isearch-item{padding:0.55rem 0.85rem;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-size:0.76rem;}
+.isearch-item{padding:0.55rem 0.85rem;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-size:0.76rem;transition:background 0.1s;}
 .isearch-item:hover{background:rgba(240,192,64,0.05);}
 .isearch-item:last-child{border-bottom:none;}
 .is-code{font-family:'IBM Plex Mono',monospace;font-size:0.65rem;color:var(--muted);}
@@ -1167,6 +1167,12 @@ function smartSearch(val){
   var q=val.trim().toLowerCase();
   var drop=$('inv-drop');
   if(!q){ drop.style.display='none'; return; }
+  // Check inventory loaded
+  if(!inventory||!inventory.length){
+    drop.innerHTML='<div style="padding:0.75rem 1rem;color:var(--gold);font-size:0.72rem;font-family:monospace;">⏳ Loading inventory…</div>';
+    drop.style.display='block';
+    return;
+  }
   var hits=inventory.filter(function(p){
     return p.code.toLowerCase().includes(q)||
            p.name.toLowerCase().includes(q)||
@@ -1372,52 +1378,69 @@ function drawPr(){
   if(!inventory.length){tb.innerHTML='';$('prod-empty').style.display='block';return;}
   $('prod-empty').style.display='none';
 
+  var PAGE=50;
+  var page=window._prodPage||0;
+
+  // Build scan lookup map (fast)
   var cnt={},by={};
   scanLog.forEach(function(e){
     cnt[e.code]=(cnt[e.code]||0)+(e.qty||0);
-    if(!by[e.code])by[e.code]=new Set();
-    by[e.code].add(e.user);
+    if(!by[e.code])by[e.code]=[];
+    if(by[e.code].indexOf(e.user)===-1) by[e.code].push(e.user);
   });
 
-  var rows=inventory.map(function(p){
-    var c=cnt[p.code]||0,exp=p.expected||0,diff=exp?c-exp:null,pct=exp?Math.min(Math.round(c/exp*100),100):(c>0?100:0);
-    return{p:p,c:c,exp:exp,diff:diff,pct:pct,users:by[p.code]?[...by[p.code]].join(', '):'—'};
-  });
+  // Filter first, then paginate — don't process all 18k
+  var filtered;
+  if(prodFilter==='done'){
+    filtered=inventory.filter(function(p){return cnt[p.code]>0;});
+  } else if(prodFilter==='pending'){
+    filtered=inventory.filter(function(p){return !cnt[p.code];});
+  } else {
+    filtered=inventory;
+  }
 
-  if(prodFilter==='done') rows=rows.filter(function(r){return r.c>0;});
-  if(prodFilter==='pending') rows=rows.filter(function(r){return r.c===0;});
-
-  // Paginate — show 100 at a time
-  var PAGE=100;
-  var page=window._prodPage||0;
-  var total=rows.length;
+  var total=filtered.length;
   var start=page*PAGE;
-  var pageRows=rows.slice(start,start+PAGE);
+  var pageItems=filtered.slice(start,start+PAGE);
 
-  if(!pageRows.length){
-    tb.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:2rem;font-family:'IBM Plex Mono',monospace;font-size:0.75rem;">No products match filter</td></tr>';
+  if(!pageItems.length){
+    tb.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:2rem;font-family:monospace;font-size:0.75rem;">No products match filter</td></tr>';
     return;
   }
 
-  tb.innerHTML=pageRows.map(function(r){
-    var bc=r.pct>=100?'full':r.pct>0?'':'zero';
-    var dt=r.diff===null?'<span style="color:var(--muted)">—</span>':r.diff===0?'<span class="tag t-ok">✓ 0</span>':r.diff>0?'<span class="tag t-amb">+'+r.diff+'</span>':'<span class="tag t-bad">'+r.diff+'</span>';
-    return'<tr><td style="color:var(--gold);font-weight:600;">'+r.p.code+'</td><td class="td-name">'+r.p.name+'</td><td style="color:var(--muted)">'+(r.p.category||'—')+'</td><td>'+(r.exp||'—')+'</td><td><span class="tag t-qty">'+r.c+'</span></td><td>'+dt+'</td><td style="min-width:110px;"><div style="font-family:'IBM Plex Mono',monospace;font-size:0.65rem;color:var(--muted);">'+r.pct+'%</div><div class="prog"><div class="prog-bar '+bc+'" style="width:'+r.pct+'%"></div></div></td><td style="color:var(--muted);font-size:0.7rem;">'+r.users+'</td></tr>';
-  }).join('');
+  // Render only this page's items
+  var html='';
+  pageItems.forEach(function(p){
+    var counted=cnt[p.code]||0;
+    var exp=p.expected||0;
+    var diff=exp?counted-exp:null;
+    var pct=exp?Math.min(Math.round(counted/exp*100),100):(counted>0?100:0);
+    var bc=pct>=100?'full':pct>0?'':'zero';
+    var dt=diff===null?'<span style="color:var(--muted)">—</span>':diff===0?'<span class="tag t-ok">✓</span>':diff>0?'<span class="tag t-amb">+'+diff+'</span>':'<span class="tag t-bad">'+diff+'</span>';
+    var users=by[p.code]?by[p.code].join(', '):'—';
+    html+='<tr>';
+    html+='<td style="color:var(--gold);font-weight:600;font-size:0.72rem;">'+p.code+'</td>';
+    html+='<td class="td-name" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;">'+p.name+'</td>';
+    html+='<td style="color:var(--muted);font-size:0.7rem;">'+(p.category||'—')+'</td>';
+    html+='<td style="font-size:0.75rem;">'+(exp||'—')+'</td>';
+    html+='<td><span class="tag t-qty">'+counted+'</span></td>';
+    html+='<td>'+dt+'</td>';
+    html+='<td style="min-width:90px;"><div style="font-size:0.6rem;color:var(--muted);">'+pct+'%</div><div class="prog"><div class="prog-bar '+bc+'" style="width:'+pct+'%"></div></div></td>';
+    html+='<td style="color:var(--muted);font-size:0.65rem;">'+users+'</td>';
+    html+='</tr>';
+  });
+  tb.innerHTML=html;
 
-  // Pagination controls
+  // Pagination
   var pages=Math.ceil(total/PAGE);
   var pager=$('prod-pager');
   if(pager){
-    pager.innerHTML='';
-    if(pages>1){
-      pager.innerHTML='<div style="display:flex;align-items:center;gap:0.5rem;padding:0.75rem 1rem;border-top:1px solid var(--border);font-family:'IBM Plex Mono',monospace;font-size:0.7rem;color:var(--muted);">'
-        +'<span>Showing '+(start+1)+'-'+Math.min(start+PAGE,total)+' of '+total+'</span>'
-        +'<div style="flex:1;"></div>'
-        +(page>0?'<button onclick="window._prodPage='+(page-1)+';drawPr();" style="background:var(--sur2);border:1px solid var(--bor2);color:var(--text);padding:0.3rem 0.75rem;cursor:pointer;border-radius:3px;font-family:'IBM Plex Mono',monospace;font-size:0.7rem;">← Prev</button>':'')
-        +(page<pages-1?'<button onclick="window._prodPage='+(page+1)+';drawPr();" style="background:var(--gold);border:none;color:#150e00;padding:0.3rem 0.75rem;cursor:pointer;border-radius:3px;font-family:'IBM Plex Mono',monospace;font-size:0.7rem;font-weight:700;">Next →</button>':'')
-        +'</div>';
-    }
+    if(pages<=1){pager.innerHTML='';return;}
+    pager.innerHTML='<div style="display:flex;align-items:center;gap:0.5rem;padding:0.6rem 1rem;border-top:1px solid var(--border);font-family:monospace;font-size:0.68rem;color:var(--muted);">'
+      +'<span>'+(start+1)+'-'+Math.min(start+PAGE,total)+' of '+total+'</span><div style="flex:1"></div>'
+      +(page>0?'<button onclick="window._prodPage='+(page-1)+';drawPr();" style="background:var(--sur2);border:1px solid var(--bor2);color:var(--text);padding:0.3rem 0.7rem;cursor:pointer;border-radius:3px;font-size:0.68rem;">← Prev</button>':'')
+      +(page<pages-1?'<button onclick="window._prodPage='+(page+1)+';drawPr();" style="background:var(--gold);border:none;color:#150e00;padding:0.3rem 0.7rem;cursor:pointer;border-radius:3px;font-size:0.68rem;font-weight:700;">Next →</button>':'')
+      +'</div>';
   }
 }
 

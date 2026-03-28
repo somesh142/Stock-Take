@@ -620,11 +620,32 @@ create policy "public" on config for all using (true) with check (true);</code>
       <!-- EXPORT -->
       <div class="a-tab" id="tab-export">
         <div class="pg-title">Export Data</div>
-        <div class="pg-sub">Download all scan data as Excel — one row per product.</div>
+        <div class="pg-sub">Download scan data in different formats.</div>
+
+        <!-- Standard Excel Export -->
         <div class="ss">
-          <div class="ss-title">Export Results</div>
-          <div style="font-family:'IBM Plex Mono',monospace;font-size:0.76rem;color:var(--muted);margin-bottom:1.25rem;line-height:1.7;">All users · all quantities merged · ready to use.</div>
+          <div class="ss-title">📊 Standard Excel Export</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:0.76rem;color:var(--muted);margin-bottom:1.25rem;line-height:1.7;">All users · all quantities · full details.</div>
           <button class="btn btn-gold btn-sm" onclick="exportXL()">⬇ Export Excel</button>
+        </div>
+
+        <!-- Cin7 Core Export -->
+        <div class="ss">
+          <div class="ss-title">📦 Cin7 Core — Bulk Stock Adjustment</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:0.76rem;color:var(--muted);margin-bottom:1.25rem;line-height:1.7;">
+            Exports in the exact Cin7 Core bulk stock adjustment format.<br>
+            Ready to import directly into Cin7 Core.
+          </div>
+          <!-- Location field -->
+          <div class="fld" style="margin-bottom:1rem;">
+            <label class="lbl">Location (optional)</label>
+            <input class="inp" type="text" id="cin7-location" placeholder="e.g. Main Warehouse" style="max-width:300px;"/>
+          </div>
+          <div class="fld" style="margin-bottom:1.25rem;">
+            <label class="lbl">Comments (optional)</label>
+            <input class="inp" type="text" id="cin7-comments" placeholder="e.g. Annual Stocktake 2026" style="max-width:300px;"/>
+          </div>
+          <button class="btn btn-gold btn-sm" onclick="exportCin7()">⬇ Export for Cin7 Core</button>
         </div>
       </div>
 
@@ -1458,6 +1479,77 @@ function tab(name,el){document.querySelectorAll('.a-tab').forEach(function(t){t.
 // ═══════════════════════════════════════════════════
 //  EXPORT
 // ═══════════════════════════════════════════════════
+function fmtDate(dateStr){
+  // Convert DD/MM/YYYY to YYYYMMDD
+  if(!dateStr) return '';
+  var p=String(dateStr).split('/');
+  if(p.length===3) return p[2]+p[1].padStart(2,'0')+p[0].padStart(2,'0');
+  // Try parse as date string
+  try{
+    var d=new Date(dateStr);
+    if(!isNaN(d)){
+      var y=d.getFullYear();
+      var m=String(d.getMonth()+1).padStart(2,'0');
+      var dd=String(d.getDate()).padStart(2,'0');
+      return y+''+m+''+dd;
+    }
+  }catch(e){}
+  return '';
+}
+
+function fmtScanDate(dateStr){
+  // Convert DD/MM/YYYY scan date to YYYYMMDD
+  if(!dateStr) return '';
+  var p=String(dateStr).split('/');
+  if(p.length===3) return p[2]+p[1].padStart(2,'0')+p[0].padStart(2,'0');
+  return '';
+}
+
+function exportCin7(){
+  if(!scanLog.length){toast('No scan data to export','err');return;}
+  var location=$('cin7-location').value.trim()||'';
+  var comments=$('cin7-comments').value.trim()||'';
+
+  // Headers matching Cin7 Core template exactly
+  var rows=[['Zero/NonZero','Location','SKU','Name','Bin','BatchSerialNumber','ExpiryDate_YYYYMMDD','Quantity','UnitCost','Comments','ReceivedDate_YYYYMMDD']];
+
+  scanLog.forEach(function(e){
+    var expiryFmt=fmtDate(e.expiry||'');
+    var receivedFmt=fmtScanDate(e.date||'');
+    rows.push([
+      'NonZero',           // Zero/NonZero
+      location,            // Location
+      e.code||'',          // SKU
+      e.name||'',          // Name
+      '',                  // Bin
+      '',                  // BatchSerialNumber
+      expiryFmt,           // ExpiryDate_YYYYMMDD
+      e.qty||0,            // Quantity
+      e.cost||'',          // UnitCost
+      comments,            // Comments
+      receivedFmt          // ReceivedDate_YYYYMMDD
+    ]);
+  });
+
+  // Export as CSV (Cin7 accepts CSV)
+  var csv=rows.map(function(row){
+    return row.map(function(cell){
+      var s=String(cell===null||cell===undefined?'':cell);
+      if(s.includes(',')|| s.includes('"')||s.includes('\n')) s='"'+s.replace(/"/g,'""')+'"';
+      return s;
+    }).join(',');
+  }).join('\n');
+
+  var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;
+  a.download='Cin7_StockAdjustment_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('✔ Cin7 CSV exported — '+scanLog.length+' products');
+}
+
 function exportXL(){if(!scanLog.length){toast('No data to export','err');return;}var wb=XLSX.utils.book_new();var s1=[['Product Code','Product Name','Category','Barcode 1','Barcode 2','Barcode 3','Barcode 4','Tax Rule','Cost Price','Expiry Date','Expected Qty','Total Counted','Difference','Total Cost Value','Last Scanned By','Date','Time']];scanLog.forEach(function(e){var tv=(e.cost||0)*(e.qty||0);s1.push([e.code,e.name,e.category||'',e.bc1||'',e.bc2||'',e.bc3||'',e.bc4||'',e.tax||'',e.cost||'',e.expiry||'',e.expected||'',e.qty,e.expected?(e.qty-e.expected):'',tv?'$'+tv.toFixed(2):'',e.user,e.date,e.time]);});var uMap={};scanLog.forEach(function(e){if(!uMap[e.user])uMap[e.user]={n:0,qty:0,p:new Set()};uMap[e.user].n++;uMap[e.user].qty+=e.qty||0;uMap[e.user].p.add(e.code);});var s2=[['User','Scans','Total Units','Unique Products']];Object.keys(uMap).forEach(function(u){s2.push([u,uMap[u].n,uMap[u].qty,uMap[u].p.size]);});XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(s1),'Stock Take Results');XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(s2),'User Summary');XLSX.writeFile(wb,'stocktake_'+new Date().toISOString().slice(0,10)+'.xlsx');toast('Exported ✓');}
 
 // ═══════════════════════════════════════════════════

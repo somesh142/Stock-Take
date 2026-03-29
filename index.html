@@ -11,24 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <title>StockTake Pro</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script type="module">
-  try {
-    const zbar = await import('https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.9.15/dist/main.js');
-    console.log('zbar exports:', Object.keys(zbar).join(','));
-    if(zbar.ZBarScanner){
-      const scanner = await zbar.ZBarScanner.create();
-      window.zbarScan = async function(imageData){ return await scanner.scanImageData(imageData); };
-      window.zbarReady = true;
-      console.log('zbar ready using ZBarScanner');
-    } else if(zbar.scanImageData){
-      window.zbarScan = zbar.scanImageData;
-      window.zbarReady = true;
-      console.log('zbar ready using scanImageData');
-    } else {
-      console.error('zbar: no usable API', Object.keys(zbar));
-    }
-  } catch(e){ console.error('zbar-wasm error:', e); }
-</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -797,29 +780,29 @@ create policy "public" on config for all using (true) with check (true);</code>
 
 <!-- LIVE CAMERA SCANNER OVERLAY -->
 <div id="cam-overlay" style="display:none;position:fixed;inset:0;background:#000;z-index:500;flex-direction:column;">
-  <div style="flex:1;position:relative;overflow:hidden;">
-    <video id="cam-video" style="width:100%;height:100%;object-fit:cover;" playsinline autoplay muted></video>
-    <div style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(to right,rgba(0,0,0,0.5) 0%,transparent 20%,transparent 80%,rgba(0,0,0,0.5) 100%),linear-gradient(to bottom,rgba(0,0,0,0.55) 0%,transparent 18%,transparent 78%,rgba(0,0,0,0.55) 100%);"></div>
-    <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;">
-      <div style="width:82%;max-width:340px;height:140px;position:relative;">
-        <div style="position:absolute;top:0;left:0;width:36px;height:36px;border-top:4px solid var(--gold);border-left:4px solid var(--gold);"></div>
-        <div style="position:absolute;top:0;right:0;width:36px;height:36px;border-top:4px solid var(--gold);border-right:4px solid var(--gold);"></div>
-        <div style="position:absolute;bottom:0;left:0;width:36px;height:36px;border-bottom:4px solid var(--gold);border-left:4px solid var(--gold);"></div>
-        <div style="position:absolute;bottom:0;right:0;width:36px;height:36px;border-bottom:4px solid var(--gold);border-right:4px solid var(--gold);"></div>
-        <div id="cam-laser" style="position:absolute;left:4px;right:4px;height:2px;background:linear-gradient(90deg,transparent,var(--gold),var(--gold),transparent);box-shadow:0 0 10px var(--gold);animation:laserScan 1.4s ease-in-out infinite;"></div>
-      </div>
-    </div>
-    <div style="position:absolute;top:0;left:0;right:0;padding:1rem;text-align:center;pointer-events:none;">
-      <div id="cam-status" style="font-family:'IBM Plex Mono',monospace;font-size:0.75rem;color:rgba(255,255,255,0.85);background:rgba(0,0,0,0.55);display:inline-block;padding:0.35rem 1rem;border-radius:20px;">Point camera at barcode</div>
-    </div>
-    <div id="cam-found" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;pointer-events:none;background:rgba(38,217,138,0.1);">
-      <div style="background:rgba(0,0,0,0.85);padding:1rem 2rem;border-radius:8px;border:2px solid var(--green);text-align:center;">
-        <div style="color:var(--green);font-size:0.75rem;font-family:'IBM Plex Mono',monospace;margin-bottom:4px;">FOUND</div>
-        <div id="cam-code" style="font-family:'Bebas Neue',sans-serif;font-size:2rem;color:var(--green);letter-spacing:0.05em;"></div>
-      </div>
+  <!-- Camera container - Quagga renders video here -->
+  <div id="scanner-container" style="flex:1;position:relative;overflow:hidden;background:#000;">
+    <video autoplay="true" preload="auto" src="" style="width:100%;height:100%;object-fit:cover;"></video>
+  </div>
+  <!-- Scan overlay -->
+  <div style="position:absolute;top:0;left:0;right:0;bottom:80px;display:flex;align-items:center;justify-content:center;pointer-events:none;">
+    <div style="width:82%;max-width:340px;height:140px;position:relative;border:2px solid var(--gold);border-radius:8px;">
+      <div id="cam-laser" style="position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent);box-shadow:0 0 8px var(--gold);animation:laserScan 1.4s ease-in-out infinite;"></div>
     </div>
   </div>
-  <div style="background:rgba(0,0,0,0.95);padding:1.25rem 1.5rem 2.5rem;display:flex;align-items:center;justify-content:center;border-top:1px solid rgba(255,255,255,0.08);flex-shrink:0;">
+  <!-- Status -->
+  <div style="position:absolute;top:1rem;left:0;right:0;text-align:center;pointer-events:none;">
+    <div id="cam-status" style="font-family:'IBM Plex Mono',monospace;font-size:0.75rem;color:rgba(255,255,255,0.85);background:rgba(0,0,0,0.55);display:inline-block;padding:0.35rem 1rem;border-radius:20px;">Point camera at barcode</div>
+  </div>
+  <!-- Found flash -->
+  <div id="cam-found" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;background:rgba(38,217,138,0.15);pointer-events:none;">
+    <div style="background:rgba(0,0,0,0.85);padding:1rem 2rem;border-radius:8px;border:2px solid var(--green);text-align:center;">
+      <div style="color:var(--green);font-size:0.75rem;font-family:'IBM Plex Mono',monospace;margin-bottom:4px;">FOUND</div>
+      <div id="cam-code" style="font-family:'Bebas Neue',sans-serif;font-size:2rem;color:var(--green);letter-spacing:0.05em;"></div>
+    </div>
+  </div>
+  <!-- Close button bottom center -->
+  <div style="height:80px;background:rgba(0,0,0,0.95);display:flex;align-items:center;justify-content:center;flex-shrink:0;border-top:1px solid rgba(255,255,255,0.08);">
     <button onclick="stopCamera()" style="background:rgba(255,255,255,0.08);border:2px solid rgba(255,255,255,0.3);color:#fff;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:0.9rem;letter-spacing:0.12em;padding:1rem 3.5rem;cursor:pointer;border-radius:50px;">✕ &nbsp;CLOSE CAMERA</button>
   </div>
 </div>
@@ -1525,7 +1508,7 @@ function exportCin7(){
       '',                  // BatchSerialNumber
       expiryFmt,           // ExpiryDate_YYYYMMDD
       e.qty||0,            // Quantity
-      e.cost||'',          // UnitCost
+      (function(){var inv=inventory.find(function(p){return p.code===e.code;});return e.cost||(inv?inv.cost:0)||'';}()),  // UnitCost
       comments,            // Comments
       receivedFmt          // ReceivedDate_YYYYMMDD
     ]);
@@ -1550,7 +1533,11 @@ function exportCin7(){
   toast('✔ Cin7 CSV exported — '+scanLog.length+' products');
 }
 
-function exportXL(){if(!scanLog.length){toast('No data to export','err');return;}var wb=XLSX.utils.book_new();var s1=[['Product Code','Product Name','Category','Barcode 1','Barcode 2','Barcode 3','Barcode 4','Tax Rule','Cost Price','Expiry Date','Expected Qty','Total Counted','Difference','Total Cost Value','Last Scanned By','Date','Time']];scanLog.forEach(function(e){var tv=(e.cost||0)*(e.qty||0);s1.push([e.code,e.name,e.category||'',e.bc1||'',e.bc2||'',e.bc3||'',e.bc4||'',e.tax||'',e.cost||'',e.expiry||'',e.expected||'',e.qty,e.expected?(e.qty-e.expected):'',tv?'$'+tv.toFixed(2):'',e.user,e.date,e.time]);});var uMap={};scanLog.forEach(function(e){if(!uMap[e.user])uMap[e.user]={n:0,qty:0,p:new Set()};uMap[e.user].n++;uMap[e.user].qty+=e.qty||0;uMap[e.user].p.add(e.code);});var s2=[['User','Scans','Total Units','Unique Products']];Object.keys(uMap).forEach(function(u){s2.push([u,uMap[u].n,uMap[u].qty,uMap[u].p.size]);});XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(s1),'Stock Take Results');XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(s2),'User Summary');XLSX.writeFile(wb,'stocktake_'+new Date().toISOString().slice(0,10)+'.xlsx');toast('Exported ✓');}
+function exportXL(){if(!scanLog.length){toast('No data to export','err');return;}var wb=XLSX.utils.book_new();var s1=[['Product Code','Product Name','Category','Barcode 1','Barcode 2','Barcode 3','Barcode 4','Tax Rule','Cost Price','Expiry Date','Expected Qty','Total Counted','Difference','Total Cost Value','Last Scanned By','Date','Time']];scanLog.forEach(function(e){
+  var invItem=inventory.find(function(p){return p.code===e.code;});
+  var cost=e.cost||(invItem?invItem.cost:0)||0;
+  var tv=cost*(e.qty||0);
+  s1.push([e.code,e.name,e.category||'',e.bc1||'',e.bc2||'',e.bc3||'',e.bc4||'',e.tax||'',cost||'',e.expiry||'',e.expected||'',e.qty,e.expected?(e.qty-e.expected):'',tv?tv.toFixed(2):'',e.user,e.date,e.time]);});var uMap={};scanLog.forEach(function(e){if(!uMap[e.user])uMap[e.user]={n:0,qty:0,p:new Set()};uMap[e.user].n++;uMap[e.user].qty+=e.qty||0;uMap[e.user].p.add(e.code);});var s2=[['User','Scans','Total Units','Unique Products']];Object.keys(uMap).forEach(function(u){s2.push([u,uMap[u].n,uMap[u].qty,uMap[u].p.size]);});XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(s1),'Stock Take Results');XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(s2),'User Summary');XLSX.writeFile(wb,'stocktake_'+new Date().toISOString().slice(0,10)+'.xlsx');toast('Exported ✓');}
 
 // ═══════════════════════════════════════════════════
 //  CLEAR
@@ -1558,13 +1545,9 @@ function exportXL(){if(!scanLog.length){toast('No data to export','err');return;
 function clearAllScans(){saving(true);sbDelete('scans','code=neq.null').then(function(){scanLog=[];$('clear-modal').classList.remove('open');refreshDash();toast('All records deleted','warn');}).catch(function(e){toast('Error: '+e.message,'err');}).finally(function(){saving(false);});}
 
 // ═══════════════════════════════════════════════════
-//  UNIVERSAL BARCODE SCANNER
-//  Android: Native BarcodeDetector (hardware accelerated)
-//  iOS 14.3+: getUserMedia + zbar-wasm canvas scanning
-//  Fallback: File input with BarcodeDetector on image
+//  BARCODE SCANNER — QuaggaJS (works on iOS + Android)
 // ═══════════════════════════════════════════════════
-var camActive=false, camStream=null, camRAF=null;
-var lastScan='', lastScanTime=0;
+var camActive=false, scannerPaused=false, lastBarcode='', lastBarcodeTime=0;
 
 function openScanner(){ toggleCamera(); }
 
@@ -1577,115 +1560,55 @@ function startCamera(){
   $('cam-overlay').style.display='flex';
   $('cam-found').style.display='none';
   camActive=true;
+  scannerPaused=false;
   $('cam-btn').textContent='🔴';
   setCamStatus('Starting camera…');
 
-  // Request back camera at good resolution
-  var constraints={video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}};
+  // Reset container — exactly like their implementation
+  $('scanner-container').innerHTML='<video autoplay="true" preload="auto" src="" style="width:100%;height:100%;object-fit:cover;"></video>';
 
-  navigator.mediaDevices.getUserMedia(constraints)
-    .catch(function(){ return navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}}); })
-    .catch(function(){ return navigator.mediaDevices.getUserMedia({video:true}); })
-    .then(function(stream){
-      camStream=stream;
-      var v=$('cam-video');
-      v.srcObject=stream;
-      v.setAttribute('playsinline','');
-      v.setAttribute('autoplay','');
-      v.muted=true;
-      v.play().then(function(){
-        setCamStatus('Point camera at barcode');
-        // Pick best detection method
-        if('BarcodeDetector' in window){
-          useNativeDetector(v);
-        } else {
-          // iOS and other browsers — use canvas + zbar-wasm
-          useZbarWasm(v);
-        }
-      }).catch(function(e){
-        setCamStatus('Error: '+e.message);
-        stopCamera();
-      });
-    })
-    .catch(function(e){
-      setCamStatus('Camera permission denied');
-      toast('Allow camera access to scan barcodes','err');
-      stopCamera();
-    });
-}
-
-// ── Android: Native BarcodeDetector ──
-function useNativeDetector(video){
-  var detector=new BarcodeDetector({
-    formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','code_93','itf','qr_code','data_matrix']
-  });
-  function detect(){
-    if(!camActive) return;
-    if(video.readyState<2){camRAF=requestAnimationFrame(detect);return;}
-    detector.detect(video).then(function(r){
-      if(!camActive) return;
-      if(r&&r.length){
-        var code=r[0].rawValue, now=Date.now();
-        if(code&&(code!==lastScan||(now-lastScanTime)>2000)){
-          lastScan=code; lastScanTime=now; onFound(code); return;
-        }
+  Quagga.init({
+    inputStream:{
+      name:'Live',
+      type:'LiveStream',
+      target: $('scanner-container'),
+      constraints:{
+        facingMode:'environment',
+        width:{ideal:1280},
+        height:{ideal:720}
       }
-      camRAF=requestAnimationFrame(detect);
-    }).catch(function(){camRAF=requestAnimationFrame(detect);});
-  }
-  camRAF=requestAnimationFrame(detect);
-}
-
-// ── iOS Safari: zbar-wasm canvas scanning ──
-function useZbarWasm(video){
-  var canvas=document.createElement('canvas');
-  var ctx=canvas.getContext('2d',{willReadFrequently:true});
-
-  function decode(){
-    if(!camActive) return;
-    if(video.readyState<2||!video.videoWidth){
-      setTimeout(decode,100); return;
+    },
+    decoder:{
+      readers:['ean_reader','ean_8_reader','upc_reader','upc_e_reader','code_128_reader','code_39_reader'],
+      multiple:false
+    },
+    locate:true,
+    frequency:10
+  }, function(err){
+    if(err){
+      setCamStatus('Camera error — check permissions');
+      toast('Camera permission denied','err');
+      stopCamera();
+      return;
     }
-    // Scale down for performance
-    var scale=Math.min(1,640/video.videoWidth);
-    canvas.width=Math.round(video.videoWidth*scale);
-    canvas.height=Math.round(video.videoHeight*scale);
-    ctx.drawImage(video,0,0,canvas.width,canvas.height);
-    var imageData=ctx.getImageData(0,0,canvas.width,canvas.height);
+    Quagga.start();
+    setCamStatus('Point camera at barcode');
+  });
 
-    // Use zbar-wasm if loaded
-    if(window.zbarReady && window.zbarScan){
-      window.zbarScan(imageData).then(function(results){
-        if(!camActive) return;
-        if(results && results.length > 0){
-          var sym = results[0];
-          // Try all possible ways to get the barcode string
-          var code = '';
-          try { code = sym.decode ? sym.decode() : ''; } catch(e){}
-          if(!code) code = sym.data || sym.value || sym.rawValue || '';
-          if(!code && sym.bytes) {
-            try { code = new TextDecoder().decode(sym.bytes); } catch(e){}
-          }
-          var now = Date.now();
-          if(code && (code !== lastScan || (now - lastScanTime) > 2000)){
-            lastScan = code; lastScanTime = now; onFound(code); return;
-          }
-        }
-        setTimeout(decode, 80);
-      }).catch(function(e){
-        console.warn('zbar decode error:', e);
-        setTimeout(decode, 100);
-      });
-    } else {
-      setTimeout(decode, 300);
-      if(!window.zbarReady) setCamStatus('Loading scanner…');
-    }
-  }
-  // Start after a short delay to let video stabilize
-  setTimeout(decode,500);
+  Quagga.onDetected(function(result){
+    if(scannerPaused||!camActive) return;
+    if(!result||!result.codeResult||!result.codeResult.code) return;
+    var code=result.codeResult.code;
+    var now=Date.now();
+    if(code===lastBarcode&&(now-lastBarcodeTime)<3000) return;
+    lastBarcode=code;
+    lastBarcodeTime=now;
+    onFound(code);
+  });
 }
 
 function onFound(code){
+  scannerPaused=true;
   $('cam-found').style.display='flex';
   $('cam-code').textContent=code;
   setCamStatus('✔ Found!');
@@ -1704,61 +1627,21 @@ function setCamStatus(msg){ var el=$('cam-status'); if(el) el.textContent=msg; }
 
 function stopCamera(){
   camActive=false;
+  scannerPaused=false;
   $('cam-btn').textContent='📷';
   $('cam-overlay').style.display='none';
   $('cam-found').style.display='none';
-  if(camRAF){cancelAnimationFrame(camRAF);camRAF=null;}
-  if(camStream){camStream.getTracks().forEach(function(t){t.stop();});camStream=null;}
-  var v=$('cam-video');
-  if(v&&v.srcObject){v.srcObject.getTracks().forEach(function(t){t.stop();});v.srcObject=null;}
+  try{ Quagga.stop(); }catch(e){}
+  // Reset container
+  if($('scanner-container')){
+    $('scanner-container').innerHTML='<video autoplay="true" preload="auto" src="" style="width:100%;height:100%;object-fit:cover;"></video>';
+  }
 }
 
-// iOS file input fallback
+// iOS file input fallback (kept for older devices)
 function processIOSImage(input){
   if(!input.files||!input.files[0]) return;
-  var file=input.files[0];
-  $('cam-btn').textContent='⏳';
-  if('BarcodeDetector' in window){
-    var det=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','qr_code']});
-    createImageBitmap(file).then(function(bmp){ return det.detect(bmp); })
-      .then(function(r){
-        $('cam-btn').textContent='📷';
-        if(r&&r.length){
-          var code=r[0].rawValue;
-          if($('smart-search')) $('smart-search').value=code;
-          pickProd(code);
-          $('qty-in').value=''; $('qty-in').focus();
-        } else { toast('No barcode found — try again','warn'); }
-      }).catch(function(){ $('cam-btn').textContent='📷'; toast('Try again','warn'); });
-    return;
-  }
-  // zbar-wasm fallback for older iOS
-  var img=new Image();
-  img.onload=function(){
-    var cvs=document.createElement('canvas');
-    cvs.width=img.width; cvs.height=img.height;
-    cvs.getContext('2d').drawImage(img,0,0);
-    var id=cvs.getContext('2d').getImageData(0,0,cvs.width,cvs.height);
-    if(window.zbarReady&&window.zbarScanImageData){
-      window.zbarScan(id).then(function(r){
-        $('cam-btn').textContent='📷';
-        if(r&&r.length){
-          var sym=r[0];
-          var code='';
-          try{code=sym.decode?sym.decode():'';}catch(e){}
-          if(!code) code=sym.data||sym.value||sym.rawValue||'';
-          if(!code&&sym.bytes){try{code=new TextDecoder().decode(sym.bytes);}catch(e){}}
-          if(code){ if($('smart-search'))$('smart-search').value=code; pickProd(code); $('qty-in').value=''; $('qty-in').focus(); }
-          else toast('No barcode found — try again','warn');
-        } else toast('No barcode found — try again','warn');
-      });
-    } else {
-      $('cam-btn').textContent='📷';
-      toast('Type barcode manually','warn');
-    }
-    URL.revokeObjectURL(img.src);
-  };
-  img.src=URL.createObjectURL(file);
+  toast('Use the camera button to scan on iOS','warn');
 }
 
 

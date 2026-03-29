@@ -711,7 +711,7 @@ create policy "public" on config for all using (true) with check (true);</code>
               <div class="sp-lbl">Qty</div>
               <div class="qty-row">
                 <button class="qty-step" onclick="stepQ(-1)">−</button>
-                <input class="inp qty-inp" type="number" id="qty-in" value="1" min="0" style="font-size:1.6rem;"/>
+                <input class="inp qty-inp" type="number" id="qty-in" value="" min="0" placeholder="0" style="font-size:1.6rem;" oninput="updateRecBtn()"/>
                 <button class="qty-step" onclick="stepQ(1)">+</button>
               </div>
             </div>
@@ -903,6 +903,15 @@ function sbGet(table,params){
   return fetch(url,{headers:h}).then(function(r){if(!r.ok)throw new Error(r.status+' '+r.statusText);return r.json();});
 }
 
+function sbUpsertScan(data){
+  // Upsert scans using code+batch+expiry as unique key
+  return fetch(SB_URL+'/rest/v1/scans?on_conflict=code,batch,expiry',{
+    method:'POST',
+    headers:Object.assign({},sbHeaders(),{'Prefer':'resolution=merge-duplicates,return=minimal'}),
+    body:JSON.stringify(Array.isArray(data)?data:[data])
+  }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t);});return r;});
+}
+
 function sbUpsert(table,data){
   // Use on-conflict-ignore for inventory (skip dupes), merge for scans
   var prefer = table==='inventory'
@@ -1007,7 +1016,8 @@ function loadScans(){
       code:String(r.code||''),name:String(r.name||''),category:String(r.category||''),
       expected:Number(r.expected)||0,bc1:String(r.bc1||''),bc2:String(r.bc2||''),
       bc3:String(r.bc3||''),bc4:String(r.bc4||''),tax:String(r.tax||''),
-      expiry:String(r.expiry||''),qty:Number(r.qty)||0,user:String(r.user||'')
+      expiry:String(r.expiry||''),qty:Number(r.qty)||0,user:String(r.user||''),
+      batch:String(r.batch||'OS'),cost:Number(r.cost)||0
     };});
   }).catch(function(){});
 }
@@ -1275,25 +1285,87 @@ function pickProd(code){
 
 function invSearch(){ if($('smart-search')) smartSearch($('smart-search').value); }
 
-function stepQ(d){$('qty-in').value=Math.max(0,(parseInt($('qty-in').value)||0)+d);}
+function stepQ(d){var cur=parseInt($('qty-in').value)||0;$('qty-in').value=Math.max(0,cur+d);}
+
+function updateRecBtn(){
+  var hasProduct=curProd!==null;
+  var hasQty=parseInt($('qty-in').value)>0;
+  $('rec-btn').disabled=!(hasProduct&&hasQty);
+}
+
+function getBatchCode(code, expiry){
+  // Get all existing scans for this product
+  var existing = scanLog.filter(function(e){ return e.code === code; });
+  if(!existing.length) return 'OS'; // First scan = OS
+
+  // Check if same expiry exists
+  var sameExpiry = existing.find(function(e){
+    return e.expiry === expiry;
+  });
+
+  if(sameExpiry){
+    // Same expiry — return same batch code (will add up qty)
+    return sameExpiry.batch || 'OS';
+  }
+
+  // Different expiry — generate next batch code
+  var batches = existing.map(function(e){ return e.batch || 'OS'; });
+  // Find highest OS number
+  var maxNum = 1;
+  batches.forEach(function(b){
+    if(b === 'OS') maxNum = Math.max(maxNum, 1);
+    var match = b.match(/^OS(\d+)$/);
+    if(match) maxNum = Math.max(maxNum, parseInt(match[1]));
+  });
+  return 'OS' + (maxNum + 1);
+}
 
 function recordScan(){
   if(!curProd){ toast('Scan or search a product first','err'); return; }
   var qty=parseInt($('qty-in').value)||0;
-  if(qty<=0){ toast('Please enter a quantity','warn'); $('qty-in').focus(); return; }
+  if(!$('qty-in').value.trim()||qty<=0){ toast('Enter quantity first','warn'); $('qty-in').focus(); $('qty-in').select(); return; }
   var exRaw=$('exp-in').value;
   var expiry=exRaw?new Date(exRaw).toLocaleDateString('en-AU'):'';
   var now=new Date();
-  var entry={timestamp:now.getTime(),date:now.toLocaleDateString('en-AU'),time:now.toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',second:'2-digit'}),code:curProd.code,name:curProd.name,category:curProd.category||'',expected:curProd.expected||0,bc1:curProd.bc1||'',bc2:curProd.bc2||'',bc3:curProd.bc3||'',bc4:curProd.bc4||'',tax:curProd.tax||'',expiry:expiry,qty:qty,cost:curProd.cost||0,user:curUser};
-  var existing=scanLog.find(function(e){return e.code===entry.code;});
+
+  // Get batch code based on product + expiry
+  var batch = getBatchCode(curProd.code, expiry);
+
+  // Find existing scan with SAME code AND same expiry
+  var existing = scanLog.find(function(e){
+    return e.code === curProd.code && e.expiry === expiry;
+  });
+
+  var entry={
+    timestamp:now.getTime(),
+    date:now.toLocaleDateString('en-AU'),
+    time:now.toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',second:'2-digit'}),
+    code:curProd.code,
+    name:curProd.name,
+    category:curProd.category||'',
+    expected:curProd.expected||0,
+    bc1:curProd.bc1||'',
+    bc2:curProd.bc2||'',
+    bc3:curProd.bc3||'',
+    bc4:curProd.bc4||'',
+    tax:curProd.tax||'',
+    expiry:expiry,
+    qty:qty,
+    cost:curProd.cost||0,
+    user:curUser,
+    batch:batch
+  };
+
   if(existing){
-    pendingEntry={entry:entry,ex:existing};
-    $('dup-info').innerHTML='<div style="font-weight:700;font-size:0.9rem;margin-bottom:0.35rem;">'+existing.name+' <span style="color:var(--muted);font-weight:400;">('+existing.code+')</span></div><div>Scanned by <strong style="color:var(--gold)">'+existing.user+'</strong>'+(existing.user===curUser?' (you)':'')+' · '+existing.date+' at '+existing.time+'</div><div>Recorded qty: <strong style="color:var(--red)">'+existing.qty+'</strong></div><div>New qty: <strong style="color:var(--green)">'+entry.qty+'</strong></div>'+(existing.expiry?'<div style="color:var(--muted)">Previous expiry: '+existing.expiry+'</div>':'');
-    $('dup-q').textContent='Replace ('+existing.qty+' → '+entry.qty+') or Add Up (= '+(existing.qty+entry.qty)+')?';
-    $('dup-add').textContent='+ Add Up → '+(existing.qty+entry.qty);
-    $('dup-rep').textContent='↺ Replace → '+entry.qty;
-    $('dup-modal').classList.add('open');return;
+    // Same product + same expiry → add up qty automatically (no modal)
+    entry.qty = existing.qty + qty;
+    entry.batch = existing.batch || batch;
+    toast('✔ Added up → '+entry.qty+'× '+entry.name+' ('+batch+')');
+    commitScan(entry);
+    return;
   }
+
+  // Different expiry or new product → save as new batch
   commitScan(entry);
 }
 
@@ -1308,14 +1380,15 @@ function dupAct(action){
 
 function commitScan(entry){
   // Optimistic local update — instant feedback
-  var idx=scanLog.findIndex(function(e){return e.code===entry.code;});
+  // Match by code + expiry + batch for uniqueness
+  var idx=scanLog.findIndex(function(e){return e.code===entry.code && e.expiry===entry.expiry && e.batch===entry.batch;});
   if(idx>-1) scanLog.splice(idx,1);
   scanLog.unshift(entry);
   resetScanUI(); renderULog(); updateUStats(); renderSess();
 
   var row={code:entry.code,name:entry.name,category:entry.category,expected:entry.expected,
     bc1:entry.bc1,bc2:entry.bc2,bc3:entry.bc3,bc4:entry.bc4,tax:entry.tax,
-    expiry:entry.expiry,qty:entry.qty,cost:entry.cost||0,'user':entry.user,
+    expiry:entry.expiry,qty:entry.qty,cost:entry.cost||0,batch:entry.batch||'OS','user':entry.user,
     scan_date:entry.date,scan_time:entry.time,timestamp:entry.timestamp};
 
   // Always queue locally first — guarantees no data loss
@@ -1325,7 +1398,7 @@ function commitScan(entry){
 
   if(navigator.onLine){
     showSyncStatus('syncing','Saving…');
-    sbUpsert('scans',row)
+    sbUpsertScan(row)
       .then(function(){
         var p=getPending().filter(function(e){return e.code!==row.code;});
         setPending(p);
@@ -1340,7 +1413,7 @@ function commitScan(entry){
 }
 
 function resetScanUI(){
-  curProd=null;$('scan-in').value='';$('qty-in').value=1;$('exp-in').value='';
+  curProd=null;$('scan-in').value='';if($('smart-search'))$('smart-search').value='';$('qty-in').value='';$('exp-in').value='';
   $('prod-card').className='prod-card';
   $('prod-card').innerHTML='<div style="color:var(--muted);font-family:\'IBM Plex Mono\',monospace;font-size:0.72rem;text-align:center;">Awaiting scan…</div>';
   $('rec-btn').disabled=true;$('scan-in').focus();
@@ -1368,7 +1441,7 @@ function mobTab(t){
   if(t==='scan'){ setTimeout(function(){ if($('smart-search')) $('smart-search').focus(); },100); }
 }
 
-function renderSess(){var mine=scanLog.filter(function(e){return e.user===curUser;});var list=$('sess-list');if(!mine.length){list.innerHTML='<div style="color:var(--muted);font-family:\'IBM Plex Mono\',monospace;font-size:0.7rem;text-align:center;padding:1rem 0;">No scans yet</div>';return;}list.innerHTML=mine.map(function(e){return'<div class="sess-item"><div><div class="si-name">'+e.name+'</div><div class="si-code">'+e.code+'</div></div><span class="tag t-qty">'+e.qty+'</span></div>';}).join('');}
+function renderSess(){var mine=scanLog.filter(function(e){return e.user===curUser;});var list=$('sess-list');if(!mine.length){list.innerHTML='<div style="color:var(--muted);font-family:\'IBM Plex Mono\',monospace;font-size:0.7rem;text-align:center;padding:1rem 0;">No scans yet</div>';return;}list.innerHTML=mine.map(function(e){return'<div class="sess-item"><div><div class="si-name">'+e.name+'</div><div class="si-code">'+e.code+(e.batch?' · Batch: '+e.batch:'')+(e.expiry?' · Exp: '+e.expiry:'')+'</div></div><span class="tag t-qty">'+e.qty+'</span></div>';}).join('');}
 
 // ═══════════════════════════════════════════════════
 //  ADMIN DASHBOARD
@@ -1505,7 +1578,7 @@ function exportCin7(){
       e.code||'',          // SKU
       e.name||'',          // Name
       '',                  // Bin
-      '',                  // BatchSerialNumber
+      e.batch||'OS',      // BatchSerialNumber
       expiryFmt,           // ExpiryDate_YYYYMMDD
       e.qty||0,            // Quantity
       (function(){var inv=inventory.find(function(p){return p.code===e.code;});return e.cost||(inv?inv.cost:0)||'';}()),  // UnitCost
